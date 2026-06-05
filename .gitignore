@@ -1,0 +1,12 @@
+.env
+node_modules/
+admin/node_modules/
+admin/dist/
+admin-dist/
+backend/uploads/
+backend/fonts/*.ttf
+backend/fonts/*.otf
+*.log
+logs/
+backups/
+.DS_Store

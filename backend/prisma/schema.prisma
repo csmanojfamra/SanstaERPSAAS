@@ -1,0 +1,327 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Trust {
+  id               String   @id @default(cuid())
+  slug             String?  @unique
+  custom_domain    String?  @unique
+  name             String
+  name_hindi       String
+  address          String
+  phone            String
+  email            String?
+  logo_url         String?
+  receipt_prefix   String   @default("TRUST")
+  donor_threshold  Int      @default(1100)
+  // How many "big donors" (top donors) should be shown on the public website marquee
+  top_donors_limit Int      @default(10)
+  // Opening balances for the admin cash book (used for balance warnings/ledger)
+  opening_cash_balance Decimal @db.Decimal(12, 2) @default(0)
+  opening_bank_balance Decimal @db.Decimal(12, 2) @default(0)
+  current_fy       String   @default("2025-26")
+  is_active        Boolean  @default(true)
+  bank_name        String?
+  bank_account     String?
+  bank_ifsc        String?
+  pan_number       String?
+  reg_number       String?
+  razorpay_key     String?
+  settings_json    Json?
+  primary_color    String   @default("#FF6B00")
+  secondary_color  String   @default("#7B1C1C")
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+
+  users               User[]
+  donations           Donation[]
+  trustees            Trustee[]
+  vendors             Vendor[]
+  expenses            Expense[]
+  audit_logs          AuditLog[]
+  notifications       Notification[]
+  reconciliation_logs ReconciliationLog[]
+}
+
+model User {
+  id            String    @id @default(cuid())
+  trust_id      String
+  trust         Trust     @relation(fields: [trust_id], references: [id])
+  name          String
+  username      String
+  password_hash String
+  role               Role      @default(OPERATOR)
+  is_platform_admin  Boolean   @default(false)
+  is_active          Boolean   @default(true)
+  last_login         DateTime?
+  supabase_uid  String?   @unique
+  created_at    DateTime  @default(now())
+
+  donations_created     Donation[]
+  expenses_created      Expense[]
+  audit_logs            AuditLog[]
+  reconciliation_logs   ReconciliationLog[]
+
+  @@unique([trust_id, username])
+}
+
+enum Role {
+  ADMIN
+  OPERATOR
+}
+
+model Donation {
+  id             String      @id @default(cuid())
+  trust_id       String
+  trust          Trust       @relation(fields: [trust_id], references: [id])
+  receipt_number String
+
+  donor_name     String
+  donor_mobile   String
+  donor_city     String?
+  donor_email    String?
+  donor_address  String?
+  donor_state    String?
+  donor_pincode  String?
+  donor_type     String?      @default("INDIVIDUAL")
+  is_corpus      Boolean      @default(false)
+
+  amount         Decimal     @db.Decimal(10, 2)
+  payment_mode   PaymentMode
+  upi_ref        String?
+  cheque_number  String?
+  bank_ref       String?
+  is_reconciled  Boolean     @default(false)
+
+  purpose        String      @default("General Donation")
+  donation_date  DateTime    @db.Date
+  notes          String?
+
+  receipt_pdf_path  String?
+  receipt_pdf_url   String?
+  receipt_sent_at   DateTime?
+  whatsapp_sent     Boolean  @default(false)
+  whatsapp_sent_at  DateTime?
+  email_sent        Boolean  @default(false)
+
+  is_online      Boolean     @default(false)
+  gateway_ref    String?
+  gateway_status String?
+
+  is_80g_eligible Boolean   @default(false)
+  pan_number      String?
+
+  is_deleted     Boolean     @default(false)
+  created_by     String?
+  created_by_user User?      @relation(fields: [created_by], references: [id])
+  created_at     DateTime    @default(now())
+  updated_at     DateTime    @updatedAt
+
+  reconciliation_logs ReconciliationLog[]
+
+  @@unique([trust_id, receipt_number])
+}
+
+enum PaymentMode {
+  CASH
+  UPI
+  CHEQUE
+  NEFT
+  RTGS
+  DD
+  ONLINE
+}
+
+// Where the expense money is paid from
+// CASH  -> from cash drawer
+// BANK  -> from bank transfer/cheque/online/etc.
+enum PaymentChannel {
+  CASH
+  BANK
+}
+
+model Trustee {
+  id            String   @id @default(cuid())
+  trust_id       String
+  trust          Trust    @relation(fields: [trust_id], references: [id])
+  name          String
+  name_hindi    String?
+  mobile        String?
+  email         String?
+  role          String?
+  joining_date  DateTime? @db.Date
+  pan_number    String?
+  address       String?
+  address_line1 String?
+  address_line2 String?
+  city          String?
+  state         String?
+  pincode       String?
+  notes         String?
+  authorized_signatory Boolean @default(false)
+  bank_signatory Boolean @default(false)
+  photo_url     String?
+  display_order Int      @default(0)
+  is_active     Boolean  @default(true)
+  created_at    DateTime @default(now())
+
+  contributions TrusteeContribution[]
+}
+
+model TrusteeContribution {
+  id                String       @id @default(cuid())
+  trustee_id        String
+  trustee           Trustee      @relation(fields: [trustee_id], references: [id])
+  amount            Decimal      @db.Decimal(10, 2)
+  contribution_date DateTime     @db.Date
+  payment_mode      PaymentMode?
+  remarks           String?
+  created_at        DateTime     @default(now())
+}
+
+model Expense {
+  id              String          @id @default(cuid())
+  trust_id        String
+  trust           Trust           @relation(fields: [trust_id], references: [id])
+  voucher_number  String?
+  expense_date    DateTime        @db.Date
+  category        ExpenseCategory
+  expense_nature  String?         @default("OPERATIONAL")
+  amount          Decimal         @db.Decimal(10, 2)
+  description     String
+  paid_to         String?
+  vendor_mobile   String?
+  payment_mode    PaymentMode?    @default(CASH)
+  upi_ref         String?
+  cheque_number   String?
+  transaction_id  String?
+  reference       String?
+  bank_ref        String?
+  notes           String?
+  vendor_id       String?
+  vendor          Vendor?         @relation(fields: [vendor_id], references: [id])
+  payment_channel PaymentChannel @default(CASH)
+  is_reconciled   Boolean         @default(false)
+  attachment_url  String?
+  created_by      String?
+  created_by_user User?           @relation(fields: [created_by], references: [id])
+  created_at      DateTime        @default(now())
+  updated_at      DateTime        @updatedAt
+
+  reconciliation_logs ReconciliationLog[]
+
+  @@unique([trust_id, voucher_number])
+}
+
+model Vendor {
+  id         String   @id @default(cuid())
+  trust_id   String
+  trust      Trust    @relation(fields: [trust_id], references: [id])
+  name       String
+  mobile     String?
+  category   String?  @default("GENERAL")
+  notes      String?
+  is_active  Boolean  @default(true)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  expenses   Expense[]
+
+  @@index([trust_id, is_active])
+  @@unique([trust_id, name, mobile])
+}
+
+enum ExpenseCategory {
+  LABOUR_CONSTRUCTION
+  RELIGIOUS_ACTIVITIES
+  TEMPLE_MAINTENANCE
+  UTILITIES
+  PRASAD_FOOD_DISTRIBUTION
+  FESTIVAL_EXPENSES
+  ADMINISTRATIVE_EXPENSES
+  SALARY_WAGES
+  LEGAL_PROFESSIONAL
+  CHARITY_RELIEF
+  BANK_CHARGES
+  CONSTRUCTION
+  MATERIALS
+  LABOUR
+  PUJA
+  ADMIN
+  TRAVEL
+  FOOD
+  OTHER
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  trust_id    String
+  trust       Trust    @relation(fields: [trust_id], references: [id])
+  user_id     String?
+  user        User?    @relation(fields: [user_id], references: [id])
+  module      String
+  action      String
+  entity_type String
+  entity_id   String?
+  description String
+  metadata    Json?
+  ip_address  String?
+  user_agent  String?
+  created_at  DateTime @default(now())
+
+  @@index([trust_id, module])
+  @@index([created_at])
+}
+
+model Notification {
+  id         String               @id @default(cuid())
+  trust_id   String
+  trust      Trust                @relation(fields: [trust_id], references: [id])
+  type       NotificationType
+  title      String
+  message    String
+  is_read    Boolean              @default(false)
+  priority   NotificationPriority @default(MEDIUM)
+  created_at DateTime             @default(now())
+
+  @@index([trust_id, is_read])
+  @@index([created_at])
+}
+
+enum NotificationType {
+  DONATION
+  EXPENSE
+  SYSTEM
+  RECEIPT
+  SECURITY
+}
+
+enum NotificationPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+model ReconciliationLog {
+  id              String    @id @default(cuid())
+  trust_id        String
+  trust           Trust     @relation(fields: [trust_id], references: [id])
+  donation_id     String?
+  donation        Donation? @relation(fields: [donation_id], references: [id])
+  expense_id      String?
+  expense         Expense?  @relation(fields: [expense_id], references: [id])
+  reconciled_by   String?
+  reconciled_user User?     @relation(fields: [reconciled_by], references: [id])
+  remarks         String?
+  created_at      DateTime  @default(now())
+
+  @@index([trust_id])
+  @@index([created_at])
+}
+

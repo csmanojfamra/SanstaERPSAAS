@@ -1,0 +1,47 @@
+{
+  "name": "temple-trust-management",
+  "version": "1.0.0",
+  "description": "Temple Trust Management System by Fastlegal Technologies",
+  "main": "backend/server.js",
+  "scripts": {
+    "start": "node backend/server.js",
+    "dev": "nodemon backend/server.js",
+    "db:up": "docker-compose up -d",
+    "db:down": "docker-compose down",
+    "db:logs": "docker-compose logs -f postgres",
+    "db:reset": "docker-compose down -v && docker-compose up -d",
+    "prisma:generate": "npx prisma generate --schema=backend/prisma/schema.prisma",
+    "prisma:migrate": "npx prisma migrate dev --schema=backend/prisma/schema.prisma",
+    "prisma:studio": "npx prisma studio --schema=backend/prisma/schema.prisma",
+    "prisma:seed": "node backend/prisma/seed.js",
+    "admin:dev": "cd admin && npm run dev",
+    "admin:build": "cd admin && npm run build",
+    "backup": "node backend/scripts/backup.js",
+    "db:clean-test": "node backend/scripts/clean-test-data.js",
+    "qa:negative": "node backend/scripts/qa-negative-test.js",
+    "build": "npm run admin:build",
+    "setup": "npm install && npm run db:up && npx wait-on tcp:5432 && npm run prisma:migrate && npm run prisma:seed"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "@prisma/client": "^5.10.0",
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.2",
+    "pdfkit": "^0.14.0",
+    "exceljs": "^4.4.0",
+    "twilio": "^4.23.0",
+    "dotenv": "^16.4.1",
+    "express-rate-limit": "^7.2.0",
+    "cors": "^2.8.5",
+    "helmet": "^7.1.0",
+    "morgan": "^1.10.0",
+    "zod": "^3.22.4",
+    "multer": "^1.4.5-lts.1",
+    "uuid": "^9.0.0",
+    "wait-on": "^7.2.0"
+  },
+  "devDependencies": {
+    "prisma": "^5.10.0",
+    "nodemon": "^3.1.0"
+  }
+}
