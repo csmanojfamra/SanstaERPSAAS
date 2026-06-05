@@ -20,6 +20,9 @@
     "db:clean-test": "node backend/scripts/clean-test-data.js",
     "qa:negative": "node backend/scripts/qa-negative-test.js",
     "build": "npm run admin:build",
+    "docker:prod": "docker compose -f docker-compose.prod.yml --env-file .env.docker up -d --build",
+    "docker:prod:down": "docker compose -f docker-compose.prod.yml --env-file .env.docker down",
+    "docker:prod:logs": "docker compose -f docker-compose.prod.yml --env-file .env.docker logs -f app",
     "setup": "npm install && npm run db:up && npx wait-on tcp:5432 && npm run prisma:migrate && npm run prisma:seed"
   },
   "dependencies": {
