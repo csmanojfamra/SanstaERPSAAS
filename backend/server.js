@@ -62,11 +62,9 @@ app.get('/admin/*', (req, res) => {
   }
 })
 
-// Serve public temple website (standalone folder — copy `website/` to separate hosting later)
-const WEBSITE_DIR = path.join(__dirname, '../website')
-app.use(express.static(WEBSITE_DIR))
-app.get('*', (req, res) => {
-  res.sendFile(path.join(WEBSITE_DIR, 'index.html'))
+// SaaS root — send users to admin login
+app.get('/', (req, res) => {
+  res.redirect('/admin/login')
 })
 
 // Global error handler — must be last

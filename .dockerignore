@@ -1,0 +1,15 @@
+node_modules
+admin/node_modules
+admin/dist
+admin-dist
+.env
+.env.*
+!.env.example
+.git
+.gitignore
+backups
+*.png
+docs
+.DS_Store
+*.log
+website
