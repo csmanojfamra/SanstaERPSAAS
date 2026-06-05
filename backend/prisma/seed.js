@@ -55,6 +55,27 @@ async function main() {
   })
   console.log('Operator user created')
 
+  const trustAdminHash = await bcrypt.hash('123456', 12)
+  await prisma.user.upsert({
+    where: { trust_id_username: { trust_id: trust.id, username: 'sanwaliyatrust@gmail.com' } },
+    update: {
+      password_hash: trustAdminHash,
+      role: 'ADMIN',
+      is_platform_admin: false,
+      is_active: true,
+      name: 'Sanwaliya Trust Admin',
+    },
+    create: {
+      trust_id: trust.id,
+      name: 'Sanwaliya Trust Admin',
+      username: 'sanwaliyatrust@gmail.com',
+      password_hash: trustAdminHash,
+      role: 'ADMIN',
+      is_platform_admin: false,
+    },
+  })
+  console.log('Sanwaliya trust admin created')
+
   await prisma.trustee.upsert({
     where: { id: 'trustee_001' },
     update: {},
@@ -74,8 +95,9 @@ async function main() {
   console.log('----------------------------------------')
   console.log('Trust ID   :', trust.id)
   console.log('----------------------------------------')
-  console.log('Admin    -> username: admin    | password: Admin@1234')
-  console.log('Operator -> username: krishna  | password: Operator@1234')
+  console.log('Admin    -> username: admin                    | password: Admin@1234')
+  console.log('Operator -> username: krishna                  | password: Operator@1234')
+  console.log('Trust    -> username: sanwaliyatrust@gmail.com  | password: 123456')
   console.log('----------------------------------------')
   console.log('WARNING: Change all passwords before going live')
 }
