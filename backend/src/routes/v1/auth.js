@@ -50,7 +50,7 @@ router.post('/login', loginLimiter, async (req, res, next) => {
         return res.status(400).json({
           success: false,
           message:
-            'Multiple trusts use this username. Open your trust login link (subdomain) or add ?tenant=your-slug on localhost.',
+            'Multiple trusts use this username. Use a unique username or add ?tenant=your-slug to the login URL.',
           code: 'TENANT_REQUIRED',
         })
       }

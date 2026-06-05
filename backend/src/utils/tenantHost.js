@@ -42,13 +42,9 @@ function getTenantSlugFromRequest(req) {
     if (trimmed) return trimmed
   }
 
-  const host =
-    req.headers['x-forwarded-host'] ||
-    req.headers['x-tenant-host'] ||
-    req.headers.host ||
-    req.hostname
-
-  return parseSlugFromHostname(host)
+  // Platform login: no hostname slug — trusts authenticate by username/password only.
+  // Optional ?tenant= or X-Tenant-Slug for branded login pages (client sites later).
+  return null
 }
 
 function buildTenantLoginUrl(slug) {

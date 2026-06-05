@@ -92,9 +92,7 @@ export default function Login() {
   const title = tenant?.login_title || tenant?.name_hindi || tenant?.name || 'Temple Trust Admin'
   const subtitle = tenant
     ? 'Secure trust administration login'
-    : tenantSlug
-      ? 'Trust login URL not configured'
-      : 'Fastlegal Technologies — Secure login'
+    : 'Fastlegal Technologies — Secure login'
 
   return (
     <div
@@ -112,14 +110,13 @@ export default function Login() {
           <CardDescription>{subtitle}</CardDescription>
           {tenantSlug && !tenant && !tenantLoading ? (
             <p className="mt-2 text-xs text-amber-700">
-              No trust found for &quot;{tenantSlug}&quot;. Check the subdomain slug in Settings.
+              Trust &quot;{tenantSlug}&quot; not found. Sign in without ?tenant= or check the slug.
             </p>
           ) : null}
-          {!tenantSlug && window.location.hostname === 'localhost' ? (
+          {window.location.hostname === 'localhost' && !tenantSlug ? (
             <p className="mt-2 text-xs text-muted-foreground">
-              Dev tip: use{' '}
-              <code className="rounded bg-muted px-1">?tenant=sanwaliya-seth-deoli</code> or{' '}
-              <code className="rounded bg-muted px-1">sanwaliya-seth-deoli.localhost:5173</code>
+              Dev tip: optional branding with{' '}
+              <code className="rounded bg-muted px-1">?tenant=sanwaliya-seth-deoli</code>
             </p>
           ) : null}
         </CardHeader>

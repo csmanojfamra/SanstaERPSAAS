@@ -1,32 +1,19 @@
 const DEV_SLUG_KEY = 'dev_tenant_slug'
 
+/** Optional trust branding via ?tenant=slug only (no subdomain slug parsing). */
 export function getTenantSlugFromHost() {
-  const host = window.location.hostname.toLowerCase()
-
-  if (host === 'localhost' || host === '127.0.0.1') {
-    const params = new URLSearchParams(window.location.search)
-    const fromQuery = params.get('tenant')
-    if (fromQuery) {
-      localStorage.setItem(DEV_SLUG_KEY, fromQuery.trim().toLowerCase())
-      return fromQuery.trim().toLowerCase()
+  const params = new URLSearchParams(window.location.search)
+  const fromQuery = params.get('tenant')
+  if (fromQuery) {
+    const slug = fromQuery.trim().toLowerCase()
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      localStorage.setItem(DEV_SLUG_KEY, slug)
     }
-    const stored = localStorage.getItem(DEV_SLUG_KEY)
-    return stored || null
+    return slug
   }
 
-  const baseDomain = (import.meta.env.VITE_TENANT_BASE_DOMAIN || '').toLowerCase().trim()
-  if (baseDomain && (host === baseDomain || host.endsWith(`.${baseDomain}`))) {
-    const sub = host === baseDomain ? '' : host.slice(0, -(baseDomain.length + 1))
-    if (sub && !['www', 'app', 'api', 'admin', 'platform'].includes(sub)) return sub
-  }
-
-  const parts = host.split('.')
-  if (parts.length >= 3 && !['www', 'app', 'api', 'admin', 'platform'].includes(parts[0])) {
-    return parts[0]
-  }
-
-  if (parts.length === 2 && parts[1] === 'localhost') {
-    return parts[0]
+  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+    return localStorage.getItem(DEV_SLUG_KEY) || null
   }
 
   return null
@@ -39,6 +26,5 @@ export function persistDevTenantSlug(slug) {
 
 export function buildLocalTenantLoginUrl(slug) {
   if (!slug) return `${window.location.origin}${import.meta.env.BASE_URL}login`
-  const port = window.location.port ? `:${window.location.port}` : ''
-  return `${window.location.protocol}//${slug}.localhost${port}${import.meta.env.BASE_URL}login`
+  return `${window.location.origin}${import.meta.env.BASE_URL}login?tenant=${encodeURIComponent(slug)}`
 }
