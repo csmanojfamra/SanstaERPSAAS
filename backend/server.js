@@ -18,17 +18,40 @@ fs.mkdirSync(path.join(__dirname, 'fonts'), { recursive: true })
 const app = express()
 const PORT = process.env.PORT || 3000
 
+function getCorsOrigins() {
+  const origins = new Set(
+    [
+      process.env.APP_URL,
+      process.env.ADMIN_URL,
+      process.env.PUBLIC_URL,
+      process.env.PUBLIC_WEBSITE_URL,
+      'http://localhost:5173',
+      'http://localhost:3000',
+    ].filter(Boolean),
+  )
+
+  const publicSite = process.env.PUBLIC_WEBSITE_URL
+  if (publicSite) {
+    try {
+      const parsed = new URL(publicSite)
+      const port = parsed.port ? `:${parsed.port}` : ''
+      const bareHost = parsed.hostname.replace(/^www\./, '')
+      origins.add(`${parsed.protocol}//${bareHost}${port}`)
+      origins.add(`${parsed.protocol}//www.${bareHost}${port}`)
+    } catch {
+      // ignore invalid PUBLIC_WEBSITE_URL
+    }
+  }
+
+  return [...origins]
+}
+
 app.use(helmet())
 app.use(
   cors({
-    origin: [
-      process.env.APP_URL,
-      process.env.ADMIN_URL,
-      'http://localhost:5173',
-      'http://localhost:3000',
-    ],
+    origin: getCorsOrigins(),
     credentials: true,
-  })
+  }),
 )
 app.use(morgan(process.env.NODE_ENV === 'development' ? 'dev' : 'combined'))
 

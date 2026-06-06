@@ -20,6 +20,23 @@ function setCache(key, data) {
   cache[key] = { data, cachedAt: Date.now() }
 }
 
+function resolvePublicAssetUrl(url) {
+  if (!url) return null
+  if (url.startsWith('http://') || url.startsWith('https://')) return url
+  const base = (process.env.APP_URL || process.env.PUBLIC_URL || '').replace(/\/$/, '')
+  if (!base) return url
+  return `${base}${url.startsWith('/') ? url : `/${url}`}`
+}
+
+function publicTrusteeRoleFields(role) {
+  const value = role || null
+  const isHindi = value && /[\u0900-\u097F]/.test(value)
+  return {
+    role: value,
+    role_hindi: isHindi ? value : null,
+  }
+}
+
 // GET /api/v1/public/tenant-config — white-label login branding (subdomain / ?tenant=)
 router.get('/tenant-config', async (req, res, next) => {
   try {
@@ -177,6 +194,65 @@ router.get('/stats/:trustId', async (req, res, next) => {
       total_amount: aggregate._sum.amount || 0,
       unique_donors: uniqueDonors.length,
       last_updated: new Date(),
+    }
+
+    setCache(cacheKey, response)
+    res.json(response)
+  } catch (err) {
+    next(err)
+  }
+})
+
+// GET /api/v1/public/trustees/:trustId
+router.get('/trustees/:trustId', async (req, res, next) => {
+  try {
+    const { trustId } = req.params
+    const cacheKey = `trustees_${trustId}`
+
+    const cached = getCache(cacheKey)
+    if (cached) return res.json(cached)
+
+    const trust = await prisma.trust.findFirst({
+      where: { id: trustId, is_active: true },
+      select: { id: true },
+    })
+
+    if (!trust) {
+      return res.status(404).json({
+        success: false,
+        message: 'Trust not found',
+        code: 'NOT_FOUND',
+      })
+    }
+
+    const rows = await prisma.trustee.findMany({
+      where: {
+        trust_id: trustId,
+        is_active: true,
+      },
+      orderBy: [{ display_order: 'asc' }, { name: 'asc' }],
+      select: {
+        id: true,
+        name: true,
+        name_hindi: true,
+        role: true,
+        mobile: true,
+        photo_url: true,
+        display_order: true,
+      },
+    })
+
+    const response = {
+      success: true,
+      trustees: rows.map((t) => ({
+        id: t.id,
+        name: t.name,
+        name_hindi: t.name_hindi || null,
+        ...publicTrusteeRoleFields(t.role),
+        mobile: t.mobile || null,
+        photo_url: resolvePublicAssetUrl(t.photo_url),
+        display_order: t.display_order,
+      })),
     }
 
     setCache(cacheKey, response)

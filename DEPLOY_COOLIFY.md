@@ -69,6 +69,7 @@ JWT_EXPIRES_IN=8h
 APP_URL=https://erp.fastlegal.in
 ADMIN_URL=https://erp.fastlegal.in
 PUBLIC_URL=https://erp.fastlegal.in
+PUBLIC_WEBSITE_URL=https://sanwaliyasethdeoli.in
 
 TENANT_BASE_DOMAIN=erp.fastlegal.in
 TENANT_URL_PROTOCOL=https
@@ -111,6 +112,7 @@ In **Environment**, ensure these are set (adjust if you use Supabase instead of 
 APP_URL=https://sansthaerp.fastlegal.in
 ADMIN_URL=https://sansthaerp.fastlegal.in
 PUBLIC_URL=https://sansthaerp.fastlegal.in
+PUBLIC_WEBSITE_URL=https://sanwaliyasethdeoli.in
 TENANT_BASE_DOMAIN=sansthaerp.fastlegal.in
 JWT_SECRET=...
 DB_PASSWORD=...
@@ -186,6 +188,7 @@ On [sanstha.fastlegal.in](https://sanstha.fastlegal.in), point buttons to:
 | Custom domain 404 | Add hostname in Coolify **Domains** (CNAME alone is not enough) |
 | Custom domain login not branded | Confirm migration ran; `custom_domain` on trust in DB |
 | Login works but PDFs missing after redeploy | Add volume on `/app/backend/uploads` |
+| CORS errors from temple public site | Set `PUBLIC_WEBSITE_URL=https://sanwaliyasethdeoli.in` and redeploy |
 | CORS errors from landing site | Set `APP_URL` and `ADMIN_URL` to your ERP domain |
 
 ---
