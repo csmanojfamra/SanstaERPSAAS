@@ -23,12 +23,12 @@ const SANSTHAERP_LOGO = `${import.meta.env.BASE_URL}sansthaerp-logo.png`
 
 function SansthaErpFooter({ className }) {
   return (
-    <footer className={cn('flex w-full flex-col items-center gap-3 px-4 pb-6 pt-2 sm:pb-8', className)}>
+    <footer className={cn('flex w-full flex-col items-center gap-2 px-4 pb-5 pt-1 sm:pb-6', className)}>
       <a
         href="https://sanstha.fastlegal.in"
         target="_blank"
         rel="noopener noreferrer"
-        className="block w-full max-w-[360px] rounded-xl bg-white px-5 py-4 shadow-lg ring-1 ring-black/5 transition-opacity hover:opacity-95 sm:px-6 sm:py-5"
+        className="inline-flex rounded-lg bg-white/95 px-3 py-2 shadow-sm ring-1 ring-black/5 transition-opacity hover:opacity-90"
         aria-label="SANSTHAERP by FastLegal"
       >
         <img
@@ -36,19 +36,19 @@ function SansthaErpFooter({ className }) {
           alt="FastLegal SANSTHA ERP"
           width={300}
           height={73}
-          className="mx-auto h-auto w-full max-h-[72px] object-contain sm:max-h-[84px]"
+          className="h-8 w-auto max-w-[200px] object-contain sm:h-9"
         />
       </a>
-      <p className="text-center text-sm font-bold uppercase tracking-[0.14em] text-white/95 sm:text-[15px]">
+      <p className="text-center text-[11px] font-bold uppercase tracking-[0.12em] text-white/85">
         SANSTHAERP{' '}
-        <span className="font-semibold tracking-[0.1em] text-white/65">BY FASTLEGAL</span>
+        <span className="font-semibold tracking-[0.08em] text-white/55">BY FASTLEGAL</span>
       </p>
-      <p className="text-[11px] text-white/50">
+      <p className="text-[10px] text-white/45">
         <a
           href="https://fastlegal.in"
           target="_blank"
           rel="noopener noreferrer"
-          className="hover:text-white/70 hover:underline"
+          className="hover:text-white/65 hover:underline"
         >
           Fastlegal Technologies Pvt Ltd
         </a>
@@ -63,7 +63,7 @@ export default function Login() {
   const user = useAuthStore((s) => s.user)
   const login = useAuthStore((s) => s.login)
   const [error, setError] = useState('')
-  const { tenant, loading, primary, secondary, logoUrl, title, subtitle, isWhiteLabel } =
+  const { loading, primary, secondary, logoUrl, title, subtitle, isWhiteLabel } =
     useTenantLoginBranding()
 
   const {
@@ -211,15 +211,6 @@ export default function Login() {
                   )}
                 </Button>
               </form>
-
-              {!loading && tenant?.phone ? (
-                <p className="mt-4 text-center text-xs text-muted-foreground">
-                  Need help? Call{' '}
-                  <a href={`tel:${tenant.phone}`} className="font-medium text-foreground hover:underline">
-                    {tenant.phone}
-                  </a>
-                </p>
-              ) : null}
             </div>
           </div>
         </div>
