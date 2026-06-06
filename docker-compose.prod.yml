@@ -31,20 +31,21 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    ports:
-      - '${APP_PORT:-3000}:3000'
+    expose:
+      - '3000'
     environment:
+      SERVICE_FQDN_APP_3000: ''
       NODE_ENV: production
       PORT: 3000
       DATABASE_URL: postgresql://${DB_USER:-sansta_user}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-sansta_erp}
       DIRECT_URL: postgresql://${DB_USER:-sansta_user}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-sansta_erp}
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env.docker}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-8h}
-      APP_URL: ${APP_URL:-http://localhost:3000}
-      ADMIN_URL: ${ADMIN_URL:-http://localhost:3000}
-      PUBLIC_URL: ${PUBLIC_URL:-http://localhost:3000}
+      APP_URL: ${SERVICE_URL_APP_3000:-${APP_URL:-http://localhost:3000}}
+      ADMIN_URL: ${SERVICE_URL_APP_3000:-${ADMIN_URL:-http://localhost:3000}}
+      PUBLIC_URL: ${SERVICE_URL_APP_3000:-${PUBLIC_URL:-http://localhost:3000}}
       TENANT_BASE_DOMAIN: ${TENANT_BASE_DOMAIN:-localhost}
-      TENANT_URL_PROTOCOL: ${TENANT_URL_PROTOCOL:-http}
+      TENANT_URL_PROTOCOL: ${TENANT_URL_PROTOCOL:-https}
       ADMIN_PATH: ${ADMIN_PATH:-/admin/login}
       SEED_DATABASE: ${SEED_DATABASE:-false}
     volumes:

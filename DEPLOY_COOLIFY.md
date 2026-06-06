@@ -95,20 +95,25 @@ Without this, uploads are lost when the container restarts.
 
 ---
 
-## Step 6 — Domain & SSL
+## Step 6 — Domain & SSL (Docker Compose)
 
-1. Coolify → your app → **Domains** → add **every hostname** that should serve the app, for example:
-   - `sansthaerp.fastlegal.in` (platform default)
-   - `manage.sanwaliyasethdeoli.in` (Sanwaliya trust white-label admin)
-2. DNS at each registrar:
+Coolify **Docker Compose** uses one text field: **Domains for app** (no + button). Put **comma-separated** URLs for the `app` service (port 3000):
+
+```text
+https://sansthaerp.fastlegal.in,https://manage.sanwaliyasethdeoli.in
+```
+
+The repo `docker-compose.yaml` declares `SERVICE_FQDN_APP_3000` so Coolify Traefik routes both hostnames to the ERP container. **Save → Deploy** after any domain change.
+
+Optional: in **Environment**, confirm `SERVICE_FQDN_APP_3000` / `SERVICE_URL_APP_3000` were generated after deploy.
+
+DNS at the client registrar:
 
 ```
 CNAME  manage  →  [coolify-server-hostname]
 ```
 
-Or CNAME to `sansthaerp.fastlegal.in` **only if** that record already points at Coolify — you must still add the custom hostname in Coolify (DNS alone causes **404 page not found**).
-
-Coolify provisions HTTPS (Let's Encrypt) per domain automatically after DNS propagates.
+Coolify provisions HTTPS (Let's Encrypt) per domain after DNS propagates.
 
 The Sanwaliya trust `custom_domain` is set via migration `20260606120000_sanwaliya_custom_domain` (runs on deploy).
 
@@ -116,10 +121,11 @@ The Sanwaliya trust `custom_domain` is set via migration `20260606120000_sanwali
 
 | Step | Action |
 |------|--------|
+| Compose | `SERVICE_FQDN_APP_3000` in `docker-compose.yaml` (in repo) |
 | DNS | `CNAME manage.sanwaliyasethdeoli.in` → Coolify server |
-| Coolify | Add domain `manage.sanwaliyasethdeoli.in` on the ERP app |
-| Deploy | `prisma migrate deploy` sets `custom_domain` in database |
-| Verify | `https://manage.sanwaliyasethdeoli.in/admin/login` shows trust-branded login |
+| Coolify | **Domains for app** = both URLs comma-separated |
+| Deploy | Redeploy until status is **Running** (not “unapplied changes”) |
+| Verify | `https://manage.sanwaliyasethdeoli.in/admin/login` |
 
 ---
 
