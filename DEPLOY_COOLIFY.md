@@ -103,9 +103,20 @@ Coolify **Docker Compose** uses one text field: **Domains for app** (no + button
 https://sansthaerp.fastlegal.in,https://manage.sanwaliyasethdeoli.in
 ```
 
-The repo `docker-compose.yaml` declares `SERVICE_FQDN_APP_3000` so Coolify Traefik routes both hostnames to the ERP container. **Save → Deploy** after any domain change.
+The repo `docker-compose.yaml` declares `- SERVICE_FQDN_APP_3000` (list form) and keeps `ports: 3000:3000` so Traefik can reach the container. **Save → Deploy** after any domain change.
 
-Optional: in **Environment**, confirm `SERVICE_FQDN_APP_3000` / `SERVICE_URL_APP_3000` were generated after deploy.
+In **Environment**, ensure these are set (adjust if you use Supabase instead of stack postgres):
+
+```env
+APP_URL=https://sansthaerp.fastlegal.in
+ADMIN_URL=https://sansthaerp.fastlegal.in
+PUBLIC_URL=https://sansthaerp.fastlegal.in
+TENANT_BASE_DOMAIN=sansthaerp.fastlegal.in
+JWT_SECRET=...
+DB_PASSWORD=...
+```
+
+If the app shows **no available server**, open **Logs** for the `app` container — usually JWT/DB env missing or container crash.
 
 DNS at the client registrar:
 
