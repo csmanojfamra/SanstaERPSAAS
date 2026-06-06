@@ -2,6 +2,39 @@ const { z } = require('zod')
 
 /** Matches Prisma Decimal(10, 2) — max ₹99,999,999.99 */
 const MAX_AMOUNT = 99_999_999.99
+const PAYEE_AMOUNT_THRESHOLD = 5000
+const BANK_TRANSFER_MODES = new Set(['NEFT', 'RTGS', 'ONLINE', 'DD'])
+
+function refinePaymentRefs(data, ctx) {
+  const mode = data.payment_mode
+  if (mode === 'UPI' && !String(data.upi_ref || '').trim()) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'UPI reference is required', path: ['upi_ref'] })
+  }
+  if (mode === 'CHEQUE' && !String(data.cheque_number || '').trim()) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Cheque number is required', path: ['cheque_number'] })
+  }
+  const bankRef = data.bank_ref !== undefined ? data.bank_ref : data.transaction_id
+  if (BANK_TRANSFER_MODES.has(mode) && !String(bankRef || '').trim()) {
+    const path = data.bank_ref !== undefined ? 'bank_ref' : 'transaction_id'
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Bank / transaction reference is required', path: [path] })
+  }
+}
+
+function refineExpensePayee(data, ctx) {
+  const needsPayee =
+    data.amount >= PAYEE_AMOUNT_THRESHOLD || (data.payment_mode && data.payment_mode !== 'CASH')
+  if (needsPayee && !String(data.paid_to || '').trim()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message:
+        data.amount >= PAYEE_AMOUNT_THRESHOLD
+          ? `Payee name is required for amounts ₹${PAYEE_AMOUNT_THRESHOLD.toLocaleString('en-IN')} or above`
+          : 'Payee name is required for non-cash payments',
+      path: ['paid_to'],
+    })
+  }
+  refinePaymentRefs(data, ctx)
+}
 
 function isDateNotInFuture(dateStr) {
   const d = new Date(dateStr)
@@ -54,7 +87,7 @@ const donationSchema = z.object({
     .or(z.literal(''))
     .transform((v) => (v ? v.trim().toUpperCase() : v))
     .refine((v) => !v || /^[A-Z]{5}[0-9]{4}[A-Z]$/.test(v), 'Enter a valid PAN (e.g. ABCDE1234F)'),
-})
+}).superRefine((data, ctx) => refinePaymentRefs(data, ctx))
 
 const trusteeSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters').max(200, 'Name is too long'),
@@ -125,7 +158,7 @@ const expenseSchema = z.object({
     .optional()
     .default('OPERATIONAL'),
   amount: amountField,
-  description: z.string().min(3, 'Description must be at least 3 characters').max(500, 'Description is too long'),
+  description: z.string().max(500, 'Description is too long').optional().or(z.literal('')).default(''),
   paid_to: z.string().max(200).optional(),
   vendor_mobile: z.string().regex(/^[6-9]\d{9}$/).optional().or(z.literal('')),
   payment_mode: z.enum(['CASH', 'UPI', 'CHEQUE', 'NEFT', 'RTGS', 'DD', 'ONLINE']).optional().default('CASH'),
@@ -136,7 +169,7 @@ const expenseSchema = z.object({
   payment_channel: z.enum(['CASH', 'BANK']).optional(),
   notes: z.string().max(1000).optional().or(z.literal('')),
   vendor_id: z.string().optional().or(z.literal('')),
-})
+}).superRefine((data, ctx) => refineExpensePayee(data, ctx))
 
 const vendorSchema = z.object({
   name: z.string().min(2, 'Vendor name must be at least 2 characters').max(200, 'Vendor name is too long'),

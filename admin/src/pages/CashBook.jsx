@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Download, FileSpreadsheet, Loader2, RefreshCcw, AlertTriangle } from 'lucide-react'
 import PageHeader from '@/components/layout/PageHeader'
+import FilterToolbar from '@/components/common/FilterToolbar'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -19,7 +20,13 @@ function channelLabel(kind) {
 }
 
 function periodLabel(selectedPeriod, period) {
-  if (!selectedPeriod?.period) return period
+  const periodFallbacks = {
+    MONTHLY: 'This month',
+    QUARTERLY: 'This quarter',
+    YEARLY: 'This year',
+    CUSTOM: 'Custom range',
+  }
+  if (!selectedPeriod?.period) return periodFallbacks[period] || period
   const from = selectedPeriod.date_from ? new Date(selectedPeriod.date_from) : null
   if (selectedPeriod.period === 'MONTHLY' && from) {
     return from.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })
@@ -34,7 +41,7 @@ function periodLabel(selectedPeriod, period) {
       return `${from.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })} to ${to.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}`
     }
   }
-  return selectedPeriod.label || period
+  return selectedPeriod.label || periodFallbacks[period] || period
 }
 
 function formatBalanceWithSide(value) {
@@ -199,12 +206,13 @@ function LedgerPanel({ channel, ledger, isLoading, onExport, onExportCombined })
   return (
     <Card className="border-border/80">
       <CardHeader className="pb-2 pt-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
           <CardTitle className="text-base">{label} Book Register</CardTitle>
-          <div className="flex shrink-0 gap-1">
+          <div className="flex w-full flex-col gap-1 sm:w-auto sm:flex-row sm:shrink-0">
             <Button
               variant="outline"
               size="sm"
+              className="w-full justify-start sm:w-auto"
               disabled={isLoading || exporting}
               onClick={() => handleExport('excel')}
             >
@@ -213,11 +221,13 @@ function LedgerPanel({ channel, ledger, isLoading, onExport, onExportCombined })
               ) : (
                 <FileSpreadsheet className="h-4 w-4" />
               )}
-              <span className="ml-1">Export {label} Book (Excel)</span>
+              <span className="ml-1 hidden sm:inline">Export {label} Book (Excel)</span>
+              <span className="ml-1 sm:hidden">Excel</span>
             </Button>
             <Button
               variant="outline"
               size="sm"
+              className="w-full justify-start sm:w-auto"
               disabled={isLoading || exporting}
               onClick={() => handleExport('pdf')}
             >
@@ -226,11 +236,13 @@ function LedgerPanel({ channel, ledger, isLoading, onExport, onExportCombined })
               ) : (
                 <Download className="h-4 w-4" />
               )}
-              <span className="ml-1">Export {label} Book (PDF)</span>
+              <span className="ml-1 hidden sm:inline">Export {label} Book (PDF)</span>
+              <span className="ml-1 sm:hidden">PDF</span>
             </Button>
-            <Button variant="outline" size="sm" onClick={onExportCombined} disabled={isLoading || exporting}>
+            <Button variant="outline" size="sm" className="w-full justify-start sm:w-auto" onClick={onExportCombined} disabled={isLoading || exporting}>
               <Download className="h-4 w-4" />
-              <span className="ml-1">Export Combined Ledger</span>
+              <span className="ml-1 hidden sm:inline">Export Combined Ledger</span>
+              <span className="ml-1 sm:hidden">Combined</span>
             </Button>
           </div>
         </div>
@@ -303,6 +315,8 @@ export default function CashBook() {
     () => periodLabel(data?.selected_period, periodParam),
     [data?.selected_period, periodParam]
   )
+  const displayPeriodLabel =
+    isLoading && !data?.selected_period ? 'Loading period…' : selectedPeriodLabel
 
   const exportOpts = {
     period: periodParam,
@@ -342,60 +356,73 @@ export default function CashBook() {
     <>
       <PageHeader
         title="Trust Cash & Bank Ledger"
+        mobileTitle="Cash Book"
         description="Track receipts, payments and running balances across trust cash and bank accounts."
       />
 
-      <div className="mb-2 flex flex-wrap items-end gap-2 rounded-md border bg-muted/20 p-2">
-        <div className="min-w-[150px]">
-          <p className="mb-1 text-[11px] text-muted-foreground">Period</p>
-          <Select value={period} onValueChange={setPeriod}>
-            <SelectTrigger className="h-8">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="MONTHLY">Monthly</SelectItem>
-              <SelectItem value="QUARTERLY">Quarterly</SelectItem>
-              <SelectItem value="YEARLY">Yearly</SelectItem>
-              <SelectItem value="CUSTOM">Custom Date</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+      <FilterToolbar layout="period">
+        <Select value={period} onValueChange={setPeriod}>
+          <SelectTrigger className="period-bar-field h-9 min-w-0 flex-1 border-0 bg-muted/50 shadow-none sm:border sm:bg-background sm:shadow-sm">
+            <SelectValue placeholder="Period" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="MONTHLY">Monthly</SelectItem>
+            <SelectItem value="QUARTERLY">Quarterly</SelectItem>
+            <SelectItem value="YEARLY">Yearly</SelectItem>
+            <SelectItem value="CUSTOM">Custom Date</SelectItem>
+          </SelectContent>
+        </Select>
         {period === 'CUSTOM' ? (
           <>
-            <div className="min-w-[150px]">
-              <p className="mb-1 text-[11px] text-muted-foreground">Date From</p>
-              <Input className="h-8" type="date" value={customFrom} max={customTo || todayISO()} onChange={(e) => setCustomFrom(e.target.value)} />
-            </div>
-            <div className="min-w-[150px]">
-              <p className="mb-1 text-[11px] text-muted-foreground">Date To</p>
-              <Input className="h-8" type="date" value={customTo} min={customFrom || undefined} max={todayISO()} onChange={(e) => setCustomTo(e.target.value)} />
-            </div>
+            <Input
+              className="period-bar-field h-9"
+              type="date"
+              value={customFrom}
+              max={customTo || todayISO()}
+              onChange={(e) => setCustomFrom(e.target.value)}
+              aria-label="Date from"
+            />
+            <Input
+              className="period-bar-field h-9"
+              type="date"
+              value={customTo}
+              min={customFrom || undefined}
+              max={todayISO()}
+              onChange={(e) => setCustomTo(e.target.value)}
+              aria-label="Date to"
+            />
           </>
         ) : null}
-        <div className="min-w-[140px]">
-          <p className="mb-1 text-[11px] text-muted-foreground">Ledger Type</p>
-          <Select value={activeLedger} onValueChange={setActiveLedger}>
-            <SelectTrigger className="h-8">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="CASH">Cash Book</SelectItem>
-              <SelectItem value="BANK">Bank Book</SelectItem>
-            </SelectContent>
-          </Select>
+        <Select value={activeLedger} onValueChange={setActiveLedger}>
+          <SelectTrigger className="period-bar-field h-9 min-w-0 flex-1 sm:min-w-[140px]">
+            <SelectValue placeholder="Ledger" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="CASH">Cash Book</SelectItem>
+            <SelectItem value="BANK">Bank Book</SelectItem>
+          </SelectContent>
+        </Select>
+        <div className="flex w-full gap-2 sm:w-auto">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-9 flex-1 sm:flex-none"
+            onClick={() => handleExportBoth('excel')}
+            disabled={isLoading || exportingBoth}
+          >
+            {exportingBoth === 'excel' ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileSpreadsheet className="h-4 w-4" />}
+            <span className="ml-1 hidden sm:inline">Export Combined</span>
+          </Button>
+          <Button variant="outline" size="sm" className="h-9 flex-1 sm:flex-none" onClick={() => refetch()} disabled={isLoading}>
+            <RefreshCcw className="h-4 w-4" />
+            <span className="ml-1 hidden sm:inline">Refresh</span>
+          </Button>
         </div>
-        <Button variant="outline" size="sm" onClick={() => handleExportBoth('excel')} disabled={isLoading || exportingBoth}>
-          {exportingBoth === 'excel' ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileSpreadsheet className="h-4 w-4" />}
-          <span className="ml-1">Export Combined Ledger</span>
-        </Button>
-        <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isLoading}>
-          <RefreshCcw className="h-4 w-4" />
-          <span className="ml-1">Refresh</span>
-        </Button>
-      </div>
+        <p className="w-full truncate text-[11px] text-muted-foreground sm:hidden">{displayPeriodLabel}</p>
+      </FilterToolbar>
 
       <div className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        {`FY ${new Date().getMonth() >= 3 ? new Date().getFullYear() : new Date().getFullYear() - 1}-${String(((new Date().getMonth() >= 3 ? new Date().getFullYear() : new Date().getFullYear() - 1) + 1) % 100).padStart(2, '0')} · ${selectedPeriodLabel}`}
+        {`FY ${new Date().getMonth() >= 3 ? new Date().getFullYear() : new Date().getFullYear() - 1}-${String(((new Date().getMonth() >= 3 ? new Date().getFullYear() : new Date().getFullYear() - 1) + 1) % 100).padStart(2, '0')} · ${displayPeriodLabel}`}
       </div>
 
       {isError && (
@@ -406,11 +433,11 @@ export default function CashBook() {
         </Card>
       )}
 
-      <div className="mb-2 flex gap-1">
-        <Button size="sm" variant={activeLedger === 'CASH' ? 'default' : 'outline'} onClick={() => setActiveLedger('CASH')}>
+      <div className="mb-2 flex w-full gap-1">
+        <Button size="sm" className="flex-1 sm:flex-none" variant={activeLedger === 'CASH' ? 'default' : 'outline'} onClick={() => setActiveLedger('CASH')}>
           Cash Book
         </Button>
-        <Button size="sm" variant={activeLedger === 'BANK' ? 'default' : 'outline'} onClick={() => setActiveLedger('BANK')}>
+        <Button size="sm" className="flex-1 sm:flex-none" variant={activeLedger === 'BANK' ? 'default' : 'outline'} onClick={() => setActiveLedger('BANK')}>
           Bank Book
         </Button>
       </div>

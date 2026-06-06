@@ -47,12 +47,22 @@ function getTenantSlugFromRequest(req) {
   return null
 }
 
-function buildTenantLoginUrl(slug) {
-  const baseDomain = process.env.TENANT_BASE_DOMAIN
+function buildTenantLoginUrl(slug, customDomain) {
   const adminPath = process.env.ADMIN_PATH || '/admin/login'
-  if (!slug || !baseDomain) return null
   const protocol = process.env.TENANT_URL_PROTOCOL || 'https'
+  const domain = (customDomain || '').trim().toLowerCase()
+  if (domain) {
+    const host = domain.replace(/^https?:\/\//, '').split('/')[0]
+    return `${protocol}://${host}${adminPath}`
+  }
+  const baseDomain = process.env.TENANT_BASE_DOMAIN
+  if (!slug || !baseDomain) return null
   return `${protocol}://${slug}.${baseDomain}${adminPath}`
+}
+
+function buildTrustLoginUrl(trust) {
+  if (!trust) return null
+  return buildTenantLoginUrl(trust.slug, trust.custom_domain)
 }
 
 module.exports = {
@@ -61,4 +71,5 @@ module.exports = {
   parseSlugFromHostname,
   getTenantSlugFromRequest,
   buildTenantLoginUrl,
+  buildTrustLoginUrl,
 }

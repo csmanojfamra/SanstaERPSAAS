@@ -1,6 +1,9 @@
 import { useMemo, useState } from 'react'
 import { Download, FileCheck2, FileSpreadsheet, Filter, Loader2, Printer, ShieldCheck } from 'lucide-react'
 import PageHeader from '@/components/layout/PageHeader'
+import FilterToolbar from '@/components/common/FilterToolbar'
+import CompactStatCard from '@/components/common/CompactStatCard'
+import { MobileActionsSheetTrigger } from '@/components/common/MobileActionsSheet'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -271,32 +274,69 @@ export default function Reports() {
     }
   }
 
+  const reportSheetActions = [
+    {
+      key: 'donations',
+      label: 'Export Donation Register',
+      icon: Download,
+      disabled: exporting,
+      onClick: () => handleExport('donations', 'Donation Register'),
+    },
+    {
+      key: 'expenses',
+      label: 'Export Expense Register',
+      icon: Download,
+      disabled: exporting,
+      onClick: () => handleExport('expenses', 'Expense Register'),
+    },
+    {
+      key: 'full',
+      label: 'Export Full Financial Report',
+      icon: Download,
+      disabled: exporting,
+      onClick: () => handleExport('full', 'Full Financial Report'),
+    },
+    {
+      key: 'audit',
+      label: 'Generate Audit Pack',
+      icon: ShieldCheck,
+      disabled: exporting,
+      onClick: handleAuditPack,
+    },
+  ]
+
   return (
     <>
-      <PageHeader title="Financial Reports & Registers" description="Generate operational, accounting and compliance reports for trust activities.">
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" disabled={exporting} onClick={() => handleExport('donations', 'Donation Register')}>
-            {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-            Export Donation Register
-          </Button>
-          <Button variant="outline" disabled={exporting} onClick={() => handleExport('expenses', 'Expense Register')}>
-            Export Expense Register
-          </Button>
-          <Button variant="outline" disabled={exporting} onClick={() => handleExport('full', 'Full Financial Report')}>
-            Export Full Financial Report
-          </Button>
-          <Button className="bg-maroon hover:bg-maroon/90" disabled={exporting} onClick={handleAuditPack}>
-            <ShieldCheck className="h-4 w-4" />
-            Generate Audit Pack
-          </Button>
-        </div>
+      <PageHeader
+        title="Financial Reports & Registers"
+        mobileTitle="Reports"
+        description="Generate operational, accounting and compliance reports for trust activities."
+        mobileAction={
+          <MobileActionsSheetTrigger title="Reports & Exports" actions={reportSheetActions} sheetLabel="Open report actions" />
+        }
+      >
+        <Button variant="outline" disabled={exporting} onClick={() => handleExport('donations', 'Donation Register')}>
+          {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+          Export Donation Register
+        </Button>
+        <Button variant="outline" disabled={exporting} onClick={() => handleExport('expenses', 'Expense Register')}>
+          Export Expense Register
+        </Button>
+        <Button variant="outline" disabled={exporting} onClick={() => handleExport('full', 'Full Financial Report')}>
+          Export Full Financial Report
+        </Button>
+        <Button className="bg-maroon hover:bg-maroon/90" disabled={exporting} onClick={handleAuditPack}>
+          <ShieldCheck className="h-4 w-4" />
+          Generate Audit Pack
+        </Button>
       </PageHeader>
 
-      <Card className="mb-3">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm flex items-center gap-2"><Filter className="h-4 w-4" />Select Filters -&gt; Generate Report -&gt; Export</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+      <FilterToolbar layout="none" className="sm:mb-3">
+        <div className="grid w-full gap-2 sm:col-span-2 sm:grid-cols-2 lg:col-span-4 lg:grid-cols-4">
+          <p className="col-span-full flex items-center gap-2 text-sm font-semibold sm:hidden">
+            <Filter className="h-4 w-4" />
+            Report Filters
+          </p>
           <div>
             <Label>Financial Year</Label>
             <Select
@@ -324,11 +364,11 @@ export default function Reports() {
           <div><Label>Trustee</Label><Select value={trusteeFilter} onValueChange={setTrusteeFilter}><SelectTrigger className="h-9"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ALL">All Trustees</SelectItem><SelectItem value="MANAGING">Managing Trustee</SelectItem><SelectItem value="TREASURER">Treasurer</SelectItem><SelectItem value="SECRETARY">Secretary</SelectItem></SelectContent></Select></div>
           <div><Label>Donation Type</Label><Select value={donationTypeFilter} onValueChange={setDonationTypeFilter}><SelectTrigger className="h-9"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ALL">All Types</SelectItem><SelectItem value="GENERAL">General</SelectItem><SelectItem value="CORPUS">Corpus</SelectItem><SelectItem value="CSR">CSR</SelectItem><SelectItem value="80G">80G Eligible</SelectItem></SelectContent></Select></div>
           <div><Label>Verification Status</Label><Select value={verificationStatus} onValueChange={setVerificationStatus}><SelectTrigger className="h-9"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ALL">All</SelectItem><SelectItem value="VERIFIED">Verified</SelectItem><SelectItem value="PENDING">Pending</SelectItem><SelectItem value="FLAGGED">Flagged</SelectItem></SelectContent></Select></div>
-          <div className="sm:col-span-2 lg:col-span-4 flex justify-end">
-            <Button className="h-9" onClick={handleGenerateReport}>Generate Report</Button>
+          <div className="col-span-full flex w-full justify-stretch sm:col-span-2 sm:justify-end lg:col-span-4">
+            <Button className="h-10 w-full sm:h-9 sm:w-auto" onClick={handleGenerateReport}>Generate Report</Button>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </FilterToolbar>
 
       <div className="mb-3 rounded-md border border-maroon/20 bg-maroon/5 px-3 py-2 text-sm">
         <p className="font-medium text-maroon">Active report period (modules & insights below)</p>
@@ -339,18 +379,15 @@ export default function Reports() {
         <p className="text-sm font-semibold">Period Summary</p>
         <span className="text-[11px] text-muted-foreground">Uses Date From / Date To filters</span>
       </div>
-      <div className="mb-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+      <div className="mb-3 grid grid-cols-2 gap-2 lg:grid-cols-4 xl:grid-cols-7">
         {quickInsights.map((item) => (
-          <Card key={item.label}>
-            <CardHeader className="pb-1"><CardTitle className="text-[11px] text-muted-foreground">{item.label}</CardTitle></CardHeader>
-            <CardContent><p className="text-sm font-semibold">{item.value}</p></CardContent>
-          </Card>
+          <CompactStatCard key={item.label} label={item.label} value={item.value} valueClassName="text-sm font-semibold" />
         ))}
       </div>
 
-      <div className="mb-3 flex flex-wrap gap-2">
+      <div className="mb-3 flex gap-2 overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch]">
         {REPORT_CATEGORIES.map((category) => (
-          <Button key={category} size="sm" variant={category === activeCategory ? 'default' : 'outline'} onClick={() => setActiveCategory(category)}>
+          <Button key={category} size="sm" className="shrink-0" variant={category === activeCategory ? 'default' : 'outline'} onClick={() => setActiveCategory(category)}>
             {category}
           </Button>
         ))}

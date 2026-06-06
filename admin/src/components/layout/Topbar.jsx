@@ -1,5 +1,6 @@
+import { useEffect, useState } from 'react'
 import { Menu, LogOut, UserCircle2 } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/store/useAuthStore'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -8,6 +9,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 import Sidebar from './Sidebar'
 
 export default function Topbar() {
+  const [menuOpen, setMenuOpen] = useState(false)
+  const location = useLocation()
   const navigate = useNavigate()
   const user = useAuthStore((s) => s.user)
   const logout = useAuthStore((s) => s.logout)
@@ -23,20 +26,27 @@ export default function Topbar() {
     navigate('/login')
   }
 
+  useEffect(() => {
+    setMenuOpen(false)
+  }, [location.pathname])
+
   return (
-    <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b bg-white/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-white/80">
-      <div className="flex items-center gap-2 lg:hidden">
-        <Sheet>
+    <header className="sticky top-0 z-40 flex h-14 min-h-[3.5rem] items-center justify-between gap-2 border-b bg-white/95 px-3 backdrop-blur supports-[backdrop-filter]:bg-white/80 sm:px-4">
+      <div className="flex min-w-0 items-center gap-2 lg:hidden">
+        <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
           <SheetTrigger asChild>
             <Button variant="ghost" size="icon" aria-label="Open menu">
               <Menu className="h-5 w-5" />
             </Button>
           </SheetTrigger>
-          <SheetContent side="left" className="p-0 border-0">
-            <Sidebar onNavigate={() => document.body.click()} />
+          <SheetContent
+            side="left"
+            className="w-[min(300px,88vw)] border-0 p-0 [&>button]:text-white [&>button]:hover:text-white/90"
+          >
+            <Sidebar compact onNavigate={() => setMenuOpen(false)} />
           </SheetContent>
         </Sheet>
-        <span className="text-sm font-semibold text-maroon">Temple Admin</span>
+        <span className="truncate text-sm font-semibold text-maroon">Temple Admin</span>
       </div>
 
       <div className="hidden lg:block" />

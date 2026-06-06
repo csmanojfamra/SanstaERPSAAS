@@ -60,6 +60,16 @@ export function formatExpenseCategory(category) {
   return EXPENSE_CATEGORIES.find((c) => c.value === category)?.label || category
 }
 
+/** Display text for expense particulars — falls back when description is empty. */
+export function formatExpenseParticulars(expense) {
+  const desc = String(expense?.description ?? '').trim()
+  if (desc) return desc
+  const cat = formatExpenseCategory(expense?.category)
+  const payee = String(expense?.paid_to ?? '').trim()
+  if (cat && payee) return `${cat} — ${payee}`
+  return payee || cat || '—'
+}
+
 export function todayISO() {
   return new Date().toISOString().slice(0, 10)
 }

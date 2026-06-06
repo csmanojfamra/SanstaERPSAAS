@@ -1,7 +1,7 @@
 const router = require('express').Router()
 const prisma = require('../../lib/prisma')
 const { resolveTrustFromRequest, tenantPublicConfig } = require('../../services/tenant.service')
-const { buildTenantLoginUrl } = require('../../utils/tenantHost')
+const { buildTrustLoginUrl } = require('../../utils/tenantHost')
 
 const cache = {}
 const CACHE_TTL = 5 * 60 * 1000
@@ -45,7 +45,7 @@ router.get('/tenant-config', async (req, res, next) => {
       success: true,
       tenant: {
         ...tenantPublicConfig(trust),
-        login_url: buildTenantLoginUrl(trust.slug),
+        login_url: buildTrustLoginUrl(trust),
       },
       slug,
     })

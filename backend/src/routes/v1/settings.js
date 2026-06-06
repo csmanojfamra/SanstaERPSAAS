@@ -5,7 +5,7 @@ const prisma = require('../../lib/prisma')
 const { createAuditLog } = require('../../services/audit.service')
 const { getAuditContext } = require('../../utils/auditContext')
 const { trustSlugUpdateSchema, validate } = require('../../utils/validators')
-const { buildTenantLoginUrl } = require('../../utils/tenantHost')
+const { buildTrustLoginUrl } = require('../../utils/tenantHost')
 
 const settingsSchema = z.object({
   name: z.string().min(2).max(200).optional(),
@@ -125,7 +125,7 @@ router.get('/', async (req, res, next) => {
         opening_bank_balance: Number(trust.opening_bank_balance || 0),
         slug: trust.slug || '',
         custom_domain: trust.custom_domain || '',
-        login_url: buildTenantLoginUrl(trust.slug),
+        login_url: buildTrustLoginUrl(trust),
       },
     })
   } catch (err) {
@@ -183,7 +183,7 @@ router.put('/tenant-access', async (req, res, next) => {
       success: true,
       slug: refreshed.slug,
       custom_domain: refreshed.custom_domain || '',
-      login_url: buildTenantLoginUrl(refreshed.slug),
+      login_url: buildTrustLoginUrl(refreshed),
     })
   } catch (err) {
     next(err)

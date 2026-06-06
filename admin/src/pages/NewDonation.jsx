@@ -13,6 +13,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useCreateDonation } from '@/hooks/useDonations'
 import { formatPaymentMode, todayISO } from '@/utils/formatters'
 import { getApiErrorMessage } from '@/lib/api'
+import { validateDonationPaymentRefs, confirmBackdatedEntry } from '@/lib/formHelpers'
+import RequiredLabel from '@/components/common/RequiredLabel'
 import { toast } from '@/hooks/use-toast'
 import { ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -67,6 +69,10 @@ const schema = z.object({
     .transform((v) => (v ? v.trim().toUpperCase() : v))
     .refine((v) => !v || /^[A-Z]{5}[0-9]{4}[A-Z]$/.test(v), 'Enter a valid PAN (e.g. ABCDE1234F)'),
   notes: z.string().optional(),
+}).superRefine((data, ctx) => {
+  for (const issue of validateDonationPaymentRefs(data.payment_mode, data)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: issue.message, path: [issue.field] })
+  }
 })
 
 const PAYMENT_MODES = ['CASH', 'UPI', 'CHEQUE', 'NEFT', 'RTGS', 'DD', 'ONLINE']
@@ -110,6 +116,7 @@ export default function NewDonation() {
   const amount = Number(watch('amount') || 0)
 
   const onSubmit = async (values) => {
+    if (!confirmBackdatedEntry(values.donation_date, 'donation')) return
     try {
       const payload = { ...values }
       if (paymentMode !== 'UPI') delete payload.upi_ref
@@ -125,27 +132,27 @@ export default function NewDonation() {
 
   return (
     <>
-      <PageHeader title="New Donation" description="Record a new donation" />
+      <PageHeader title="New Donation" mobileTitle="New Donation" description="Record a new donation receipt" />
 
-      <Card className="max-w-2xl">
+      <Card className="w-full max-w-2xl">
         <CardContent className="pt-6">
           <form onSubmit={handleSubmit(onSubmit)} className="grid gap-3.5 sm:grid-cols-2">
             <div className="sm:col-span-2">
-              <Label>Donor name *</Label>
+              <RequiredLabel>Donor name</RequiredLabel>
               <Input {...register('donor_name')} />
               {errors.donor_name && <p className="text-sm text-destructive">{errors.donor_name.message}</p>}
             </div>
             <div>
-              <Label>Mobile *</Label>
+              <RequiredLabel>Mobile</RequiredLabel>
               <Input {...register('donor_mobile')} maxLength={10} />
               {errors.donor_mobile && <p className="text-sm text-destructive">{errors.donor_mobile.message}</p>}
             </div>
             <div>
-              <Label>City</Label>
+              <RequiredLabel optional>City</RequiredLabel>
               <Input {...register('donor_city')} />
             </div>
             <div>
-              <Label>Amount (₹) *</Label>
+              <RequiredLabel>Amount (₹)</RequiredLabel>
               <Input
                 type="number"
                 min={0.01}
@@ -161,11 +168,12 @@ export default function NewDonation() {
               ) : null}
             </div>
             <div>
-              <Label>Donation date *</Label>
+              <RequiredLabel>Donation date</RequiredLabel>
               <Input type="date" max={todayISO()} {...register('donation_date')} />
+              {errors.donation_date && <p className="text-sm text-destructive">{errors.donation_date.message}</p>}
             </div>
             <div>
-              <Label>Payment mode *</Label>
+              <RequiredLabel>Payment mode</RequiredLabel>
               <Select value={paymentMode} onValueChange={(v) => setValue('payment_mode', v)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -175,12 +183,34 @@ export default function NewDonation() {
                 </SelectContent>
               </Select>
             </div>
+            {paymentMode === 'UPI' ? (
+              <div className="sm:col-span-2">
+                <RequiredLabel>UPI Reference Number</RequiredLabel>
+                <Input {...register('upi_ref')} />
+                {errors.upi_ref && <p className="text-sm text-destructive">{errors.upi_ref.message}</p>}
+              </div>
+            ) : null}
+            {paymentMode === 'CHEQUE' ? (
+              <div className="sm:col-span-2">
+                <RequiredLabel>Cheque Number</RequiredLabel>
+                <Input {...register('cheque_number')} />
+                {errors.cheque_number && <p className="text-sm text-destructive">{errors.cheque_number.message}</p>}
+              </div>
+            ) : null}
+            {BANK_TRANSFER_MODES.has(paymentMode) ? (
+              <div className="sm:col-span-2">
+                <RequiredLabel>Bank Transaction ID</RequiredLabel>
+                <Input {...register('bank_ref')} />
+                {errors.bank_ref && <p className="text-sm text-destructive">{errors.bank_ref.message}</p>}
+              </div>
+            ) : null}
             <div>
-              <Label>Purpose *</Label>
+              <RequiredLabel>Purpose</RequiredLabel>
               <Input {...register('purpose')} />
+              {errors.purpose && <p className="text-sm text-destructive">{errors.purpose.message}</p>}
             </div>
             <div className="sm:col-span-2">
-              <Label>Notes</Label>
+              <RequiredLabel optional>Notes</RequiredLabel>
               <Textarea {...register('notes')} />
             </div>
             <div className="sm:col-span-2">
@@ -261,24 +291,6 @@ export default function NewDonation() {
                         </div>
                       </div>
 
-                      {paymentMode === 'UPI' ? (
-                        <div className="sm:col-span-2">
-                          <Label>UPI Reference Number</Label>
-                          <Input {...register('upi_ref')} />
-                        </div>
-                      ) : null}
-                      {paymentMode === 'CHEQUE' ? (
-                        <div className="sm:col-span-2">
-                          <Label>Cheque Number</Label>
-                          <Input {...register('cheque_number')} />
-                        </div>
-                      ) : null}
-                      {BANK_TRANSFER_MODES.has(paymentMode) ? (
-                        <div className="sm:col-span-2">
-                          <Label>Bank Transaction ID</Label>
-                          <Input {...register('bank_ref')} />
-                        </div>
-                      ) : null}
                     </div>
                   </div>
                 ) : null}

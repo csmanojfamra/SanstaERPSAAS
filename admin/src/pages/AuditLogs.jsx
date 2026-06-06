@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import PageHeader from '@/components/layout/PageHeader'
+import CompactStatCard from '@/components/common/CompactStatCard'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -257,16 +258,22 @@ export default function AuditLogs() {
     <>
       <PageHeader
         title="Audit Trail & Activity Register"
+        mobileTitle="Audit Logs"
         description="Track operational activities, financial actions and system changes across the trust platform."
       />
 
-      <div className="mb-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-        <Card><CardContent className="p-3"><p className="text-[11px] text-muted-foreground">Total Activities Today</p><p className="text-lg font-semibold">{summary.totalToday}</p></CardContent></Card>
-        <Card><CardContent className="p-3"><p className="text-[11px] text-muted-foreground">Financial Actions</p><p className="text-lg font-semibold">{summary.financial}</p></CardContent></Card>
-        <Card><CardContent className="p-3"><p className="text-[11px] text-muted-foreground">Modified Records</p><p className="text-lg font-semibold">{summary.modified}</p></CardContent></Card>
-        <Card><CardContent className="p-3"><p className="text-[11px] text-muted-foreground">Reconciliation Actions</p><p className="text-lg font-semibold">{summary.reconciled}</p></CardContent></Card>
-        <Card><CardContent className="p-3"><p className="text-[11px] text-muted-foreground">Login Activity</p><p className="text-lg font-semibold">{summary.login}</p></CardContent></Card>
-        <Card><CardContent className="p-3"><p className="text-[11px] text-muted-foreground">High Risk Activities</p><p className={`text-lg font-semibold ${summary.highRisk > 0 ? 'text-rose-700' : 'text-emerald-700'}`}>{summary.highRisk}</p></CardContent></Card>
+      <div className="mb-3 grid grid-cols-2 gap-2 lg:grid-cols-3 xl:grid-cols-6">
+        <CompactStatCard label="Total Activities Today" value={summary.totalToday} />
+        <CompactStatCard label="Financial Actions" value={summary.financial} />
+        <CompactStatCard label="Modified Records" value={summary.modified} />
+        <CompactStatCard shortLabel="Reconciliation" label="Reconciliation Actions" value={summary.reconciled} />
+        <CompactStatCard label="Login Activity" value={summary.login} />
+        <CompactStatCard
+          label="High Risk Activities"
+          shortLabel="High Risk"
+          value={summary.highRisk}
+          valueClassName={summary.highRisk > 0 ? 'text-rose-700' : 'text-emerald-700'}
+        />
       </div>
 
       <div className={`mb-3 rounded-md border px-3 py-2 text-sm ${summary.highRisk > 0 ? 'border-amber-200 bg-amber-50 text-amber-900' : 'border-emerald-200 bg-emerald-50 text-emerald-800'}`}>
@@ -275,8 +282,8 @@ export default function AuditLogs() {
           : 'No suspicious or backdated financial activities found.'}
       </div>
 
-      <Card className="mb-4">
-        <CardContent className="pt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-7">
+      <Card className="mb-4 border-border/70">
+        <CardContent className="grid gap-2 px-2.5 py-3 pt-4 sm:grid-cols-2 sm:px-6 lg:grid-cols-7">
           <div>
             <Label>Module</Label>
             <Select value={module || 'all'} onValueChange={(v) => { setModule(v === 'all' ? '' : v); setPage(1) }}>
@@ -334,16 +341,16 @@ export default function AuditLogs() {
             <Label>Search</Label>
             <Input className="h-9" placeholder="Search ref, user, donor, payee..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
           </div>
-          <div className="sm:col-span-2 lg:col-span-7 flex flex-wrap justify-between gap-2 pt-1">
-            <div className="flex gap-2">
-              <Button size="sm" variant={viewMode === 'TABLE' ? 'default' : 'outline'} onClick={() => setViewMode('TABLE')}>Table View</Button>
-              <Button size="sm" variant={viewMode === 'TIMELINE' ? 'default' : 'outline'} onClick={() => setViewMode('TIMELINE')}>Timeline View</Button>
+          <div className="flex flex-col gap-2 sm:col-span-2 lg:col-span-7 sm:flex-row sm:flex-wrap sm:justify-between sm:pt-1">
+            <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
+              <Button size="sm" className="w-full sm:w-auto" variant={viewMode === 'TABLE' ? 'default' : 'outline'} onClick={() => setViewMode('TABLE')}>Table View</Button>
+              <Button size="sm" className="w-full sm:w-auto" variant={viewMode === 'TIMELINE' ? 'default' : 'outline'} onClick={() => setViewMode('TIMELINE')}>Timeline View</Button>
             </div>
-            <div className="flex gap-2">
-              <Button size="sm" variant="outline" onClick={exportAuditCsv}>Export Excel</Button>
-              <Button size="sm" variant="outline" onClick={exportAuditPdf}>Export PDF</Button>
-              <Button size="sm" variant="outline" onClick={exportAuditPdf}>Audit Report Export</Button>
-              <Button size="sm" variant="outline" onClick={() => { setModule(''); setAction(''); setDateFrom(''); setDateTo(''); setSeverity('ALL'); setSelectedUser('ALL'); setSearchTerm(''); setPage(1) }}>
+            <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap">
+              <Button size="sm" variant="outline" className="w-full sm:w-auto" onClick={exportAuditCsv}>Export Excel</Button>
+              <Button size="sm" variant="outline" className="w-full sm:w-auto" onClick={exportAuditPdf}>Export PDF</Button>
+              <Button size="sm" variant="outline" className="col-span-2 w-full sm:col-span-1 sm:w-auto" onClick={exportAuditPdf}>Audit Report Export</Button>
+              <Button size="sm" variant="outline" className="col-span-2 w-full sm:col-span-1 sm:w-auto" onClick={() => { setModule(''); setAction(''); setDateFrom(''); setDateTo(''); setSeverity('ALL'); setSelectedUser('ALL'); setSearchTerm(''); setPage(1) }}>
               Clear filters
               </Button>
             </div>

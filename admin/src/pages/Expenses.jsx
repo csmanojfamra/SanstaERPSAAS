@@ -2,6 +2,9 @@ import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Plus, Trash2, Download, Printer, FileText, MoreVertical, FileSpreadsheet, FileDown, Paperclip, ShieldCheck, ShieldAlert, ChevronDown, ChevronUp, Sparkles } from 'lucide-react'
 import PageHeader from '@/components/layout/PageHeader'
+import HeaderIconButton from '@/components/layout/HeaderIconButton'
+import FilterToolbar from '@/components/common/FilterToolbar'
+import CompactStatCard from '@/components/common/CompactStatCard'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -18,13 +21,30 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import ConfirmActionDialog from '@/components/common/ConfirmActionDialog'
+import RequiredLabel from '@/components/common/RequiredLabel'
+import FormDialogFooter from '@/components/common/FormDialogFooter'
+import VendorExactMatchBanner from '@/components/common/VendorExactMatchBanner'
 import EmptyState from '@/components/common/EmptyState'
 import PaginationBar from '@/components/common/PaginationBar'
 import TableLoadingSkeleton from '@/components/common/TableLoadingSkeleton'
 import { useExpenses, useCreateExpense, useDeleteExpense, useUpdateExpense, downloadExpenseVoucherPdf, fetchExpenseVoucherBlob } from '@/hooks/useExpenses'
 import { useVendors, useCreateVendor } from '@/hooks/useVendors'
-import { formatCurrency, formatDate, formatExpenseCategory, EXPENSE_CATEGORIES, todayISO } from '@/utils/formatters'
+import { formatCurrency, formatDate, formatExpenseCategory, formatExpenseParticulars, EXPENSE_CATEGORIES, todayISO } from '@/utils/formatters'
 import { getApiErrorMessage } from '@/lib/api'
+import {
+  validateExpenseForm,
+  confirmBackdatedEntry,
+  confirmDuplicateVoucher,
+  natureForExpenseCategory,
+  parseAmount,
+  formatAttachmentHint,
+  HIGH_VALUE_ATTACHMENT_THRESHOLD,
+  PAYEE_AMOUNT_THRESHOLD,
+  findExactVendorMatch,
+  isVendorLinked,
+  normalizeVendorMobile,
+  normalizeVendorName,
+} from '@/lib/formHelpers'
 import { toast } from '@/hooks/use-toast'
 import { useAuthStore } from '@/store/useAuthStore'
 import api from '@/lib/api'
@@ -152,6 +172,8 @@ export default function Expenses() {
   const deleteExpense = useDeleteExpense()
   const vendorsQuery = useVendors(vendorSearch)
   const editVendorsQuery = useVendors(editVendorSearch)
+  const vendorsDirectoryQuery = useVendors('', { enabled: addOpen })
+  const editVendorsDirectoryQuery = useVendors('', { enabled: editOpen })
   const createVendor = useCreateVendor()
   const totalAmount = Number(data?.summary?.total_amount || 0)
   const topHead = data?.by_category?.[0]
@@ -191,14 +213,83 @@ export default function Expenses() {
     }
   }, [searchParams])
 
+  const createExactVendorMatch = useMemo(
+    () => findExactVendorMatch(vendorsDirectoryQuery.data, form.paid_to, form.vendor_mobile),
+    [vendorsDirectoryQuery.data, form.paid_to, form.vendor_mobile]
+  )
+  const editExactVendorMatch = useMemo(
+    () => findExactVendorMatch(editVendorsDirectoryQuery.data, editForm.paid_to, editForm.vendor_mobile),
+    [editVendorsDirectoryQuery.data, editForm.paid_to, editForm.vendor_mobile]
+  )
+
+  useEffect(() => {
+    if (!form.vendor_id || !vendorsDirectoryQuery.data?.length) return
+    const linked = vendorsDirectoryQuery.data.find((v) => v.id === form.vendor_id)
+    if (!linked) return
+    if (
+      normalizeVendorName(linked.name) !== normalizeVendorName(form.paid_to) ||
+      normalizeVendorMobile(linked.mobile) !== normalizeVendorMobile(form.vendor_mobile)
+    ) {
+      setForm((prev) => ({ ...prev, vendor_id: '' }))
+    }
+  }, [form.paid_to, form.vendor_mobile, form.vendor_id, vendorsDirectoryQuery.data])
+
+  useEffect(() => {
+    if (!editForm.vendor_id || !editVendorsDirectoryQuery.data?.length) return
+    const linked = editVendorsDirectoryQuery.data.find((v) => v.id === editForm.vendor_id)
+    if (!linked) return
+    if (
+      normalizeVendorName(linked.name) !== normalizeVendorName(editForm.paid_to) ||
+      normalizeVendorMobile(linked.mobile) !== normalizeVendorMobile(editForm.vendor_mobile)
+    ) {
+      setEditForm((prev) => ({ ...prev, vendor_id: '' }))
+    }
+  }, [editForm.paid_to, editForm.vendor_mobile, editForm.vendor_id, editVendorsDirectoryQuery.data])
+
+  const applyExistingVendorToCreate = (vendor) => {
+    setForm((prev) => ({
+      ...prev,
+      vendor_id: vendor.id,
+      paid_to: vendor.name || prev.paid_to,
+      vendor_mobile: vendor.mobile || prev.vendor_mobile,
+    }))
+    setVendorSearch(vendor.name || '')
+    toast({ title: 'Existing vendor selected', description: `${vendor.name} linked to this voucher.` })
+  }
+
+  const applyExistingVendorToEdit = (vendor) => {
+    setEditForm((prev) => ({
+      ...prev,
+      vendor_id: vendor.id,
+      paid_to: vendor.name || prev.paid_to,
+      vendor_mobile: vendor.mobile || prev.vendor_mobile,
+    }))
+    setEditVendorSearch(vendor.name || '')
+    toast({ title: 'Existing vendor selected', description: `${vendor.name} linked to this voucher.` })
+  }
+
   const handleCreate = async () => {
+    const issues = validateExpenseForm(form, form.payment_mode)
+    if (issues.length) {
+      toast({ title: 'Check form', description: issues[0].message, variant: 'destructive' })
+      return
+    }
+    if (!confirmBackdatedEntry(form.expense_date)) return
+    const amount = parseAmount(form.amount)
+    if (amount >= HIGH_VALUE_ATTACHMENT_THRESHOLD && !form.attachment) {
+      if (!window.confirm(`No bill attached for ${formatCurrency(amount)}. Save anyway?`)) return
+    }
+    await submitCreate(false)
+  }
+
+  const submitCreate = async (confirmDuplicate = false) => {
     try {
       const payload = new FormData()
       payload.append('expense_date', form.expense_date)
       payload.append('category', form.category)
       payload.append('expense_nature', form.expense_nature)
-      payload.append('amount', String(parseFloat(form.amount)))
-      payload.append('description', form.description)
+      payload.append('amount', String(parseAmount(form.amount)))
+      payload.append('description', form.description || '')
       payload.append('paid_to', form.paid_to)
       payload.append('vendor_mobile', form.vendor_mobile)
       payload.append('payment_mode', form.payment_mode)
@@ -210,6 +301,7 @@ export default function Expenses() {
       if (form.cheque_number) payload.append('cheque_number', form.cheque_number)
       if (form.transaction_id) payload.append('transaction_id', form.transaction_id)
       if (form.attachment) payload.append('attachment', form.attachment)
+      if (confirmDuplicate) payload.append('confirm_duplicate', 'true')
 
       const result = await createExpense.mutateAsync(payload)
       toast({ title: 'Expense voucher recorded' })
@@ -236,6 +328,13 @@ export default function Expenses() {
         payment_channel: 'CASH',
       })
     } catch (err) {
+      const code = err?.response?.data?.code
+      if (code === 'DUPLICATE_VOUCHER') {
+        if (confirmDuplicateVoucher(getApiErrorMessage(err))) {
+          await submitCreate(true)
+        }
+        return
+      }
       toast({ title: 'Failed', description: getApiErrorMessage(err), variant: 'destructive' })
     }
   }
@@ -309,12 +408,19 @@ export default function Expenses() {
 
   const handleUpdateVoucher = async () => {
     if (!editingExpense) return
+    const issues = validateExpenseForm(editForm, editForm.payment_mode)
+    if (issues.length) {
+      toast({ title: 'Check form', description: issues[0].message, variant: 'destructive' })
+      return
+    }
+    if (!confirmBackdatedEntry(editForm.expense_date)) return
     try {
       await updateExpense.mutateAsync({
         id: editingExpense.id,
         payload: {
           ...editForm,
-          amount: parseFloat(editForm.amount),
+          amount: parseAmount(editForm.amount),
+          description: editForm.description || '',
           payment_channel: editPaymentChannel,
           vendor_id: editForm.vendor_id || undefined,
         },
@@ -357,6 +463,20 @@ export default function Expenses() {
         toast({ title: 'Vendor name required', description: 'Enter vendor/payee name before saving.', variant: 'destructive' })
         return
       }
+      if (!form.vendor_mobile?.trim()) {
+        toast({ title: 'Mobile required', description: 'Enter mobile number to save or match a vendor.', variant: 'destructive' })
+        return
+      }
+      const existing = findExactVendorMatch(vendorsDirectoryQuery.data, form.paid_to, form.vendor_mobile)
+      if (existing) {
+        const useExisting = window.confirm(
+          `A vendor named "${existing.name}" with mobile ${existing.mobile} is already saved. Use the existing record?`
+        )
+        if (useExisting) {
+          applyExistingVendorToCreate(existing)
+          return
+        }
+      }
       const vendor = await createVendor.mutateAsync({
         name: form.paid_to.trim(),
         mobile: form.vendor_mobile || undefined,
@@ -373,6 +493,20 @@ export default function Expenses() {
       if (!editForm.paid_to?.trim()) {
         toast({ title: 'Vendor name required', description: 'Enter vendor/payee name before saving.', variant: 'destructive' })
         return
+      }
+      if (!editForm.vendor_mobile?.trim()) {
+        toast({ title: 'Mobile required', description: 'Enter mobile number to save or match a vendor.', variant: 'destructive' })
+        return
+      }
+      const existing = findExactVendorMatch(editVendorsDirectoryQuery.data, editForm.paid_to, editForm.vendor_mobile)
+      if (existing) {
+        const useExisting = window.confirm(
+          `A vendor named "${existing.name}" with mobile ${existing.mobile} is already saved. Use the existing record?`
+        )
+        if (useExisting) {
+          applyExistingVendorToEdit(existing)
+          return
+        }
       }
       const vendor = await createVendor.mutateAsync({
         name: editForm.paid_to.trim(),
@@ -409,7 +543,7 @@ export default function Expenses() {
           getVoucherNumber(e),
           formatExpenseCategory(e.category),
           e.expense_nature || '-',
-          (e.description || '').replace(/"/g, '""'),
+          formatExpenseParticulars(e).replace(/"/g, '""'),
           (e.paid_to || '-').replace(/"/g, '""'),
           e.payment_channel || '-',
           e.payment_mode || '-',
@@ -455,7 +589,7 @@ export default function Expenses() {
       ${rows
         .map(
           (e) =>
-            `<tr><td>${formatDate(e.expense_date)}</td><td>${getVoucherNumber(e)}</td><td>${e.description || '-'}</td><td>${e.paid_to || '-'}</td><td>${e.payment_channel || '-'}</td><td>${formatCurrency(e.amount)}</td><td>${e.is_reconciled ? 'Verified' : 'Pending Verification'}</td></tr>`
+            `<tr><td>${formatDate(e.expense_date)}</td><td>${getVoucherNumber(e)}</td><td>${formatExpenseParticulars(e)}</td><td>${e.paid_to || '-'}</td><td>${e.payment_channel || '-'}</td><td>${formatCurrency(e.amount)}</td><td>${e.is_reconciled ? 'Verified' : 'Pending Verification'}</td></tr>`
         )
         .join('')}
       </tbody></table></body></html>
@@ -482,16 +616,29 @@ export default function Expenses() {
     }
   }
 
+  const createPayeeRequired =
+    parseAmount(form.amount) >= PAYEE_AMOUNT_THRESHOLD || (form.payment_mode && form.payment_mode !== 'CASH')
+  const editPayeeRequired =
+    parseAmount(editForm.amount) >= PAYEE_AMOUNT_THRESHOLD ||
+    (editForm.payment_mode && editForm.payment_mode !== 'CASH')
+
   return (
     <>
-      <PageHeader title="Expense Vouchers" description="Track trust expenditure through structured voucher records">
+      <PageHeader
+        title="Expense Vouchers"
+        mobileTitle="Expenses"
+        description="Track trust expenditure through structured voucher records"
+        mobileAction={
+          <HeaderIconButton icon={Plus} label="Record expense voucher" onClick={() => setAddOpen(true)} />
+        }
+      >
         <Button onClick={() => setAddOpen(true)}>
           <Plus className="h-4 w-4" />
           Record Expense Voucher
         </Button>
       </PageHeader>
 
-      <div className="mb-3 grid gap-2 lg:grid-cols-4">
+      <FilterToolbar>
         <Input className="h-9" placeholder="Search voucher no., payee, particulars or reference..." value={search} onChange={(e) => { setSearch(e.target.value); setPage(1) }} />
         <Select value={category || 'all'} onValueChange={(v) => { setCategory(v === 'all' ? '' : v); setPage(1) }}>
           <SelectTrigger className="h-9"><SelectValue placeholder="Category" /></SelectTrigger>
@@ -512,21 +659,17 @@ export default function Expenses() {
           </SelectContent>
         </Select>
         {period === 'CUSTOM' ? (
-          <Input className="h-9" type="date" value={customFrom} max={customTo || todayISO()} onChange={(e) => { setCustomFrom(e.target.value); setPage(1) }} />
-        ) : (
-          <div />
-        )}
-        {period === 'CUSTOM' ? (
-          <Input className="h-9" type="date" value={customTo} min={customFrom || undefined} max={todayISO()} onChange={(e) => { setCustomTo(e.target.value); setPage(1) }} />
-        ) : (
-          <div />
-        )}
-        <div className="lg:col-span-4 flex items-center justify-between">
-          <Button variant="ghost" size="sm" onClick={() => setShowAdvancedFilters((v) => !v)}>
+          <>
+            <Input className="h-9" type="date" value={customFrom} max={customTo || todayISO()} onChange={(e) => { setCustomFrom(e.target.value); setPage(1) }} aria-label="Date from" />
+            <Input className="h-9" type="date" value={customTo} min={customFrom || undefined} max={todayISO()} onChange={(e) => { setCustomTo(e.target.value); setPage(1) }} aria-label="Date to" />
+          </>
+        ) : null}
+        <div className="flex flex-col gap-2 sm:col-span-2 sm:flex-row sm:items-center sm:justify-between lg:col-span-4">
+          <Button variant="ghost" size="sm" className="w-full justify-start sm:w-auto" onClick={() => setShowAdvancedFilters((v) => !v)}>
             {showAdvancedFilters ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
             Advanced Filters
           </Button>
-          <Button variant="outline" onClick={resetFilters}>Reset Filters</Button>
+          <Button variant="outline" className="w-full sm:w-auto" onClick={resetFilters}>Reset Filters</Button>
         </div>
         {showAdvancedFilters ? (
           <>
@@ -568,7 +711,7 @@ export default function Expenses() {
             <Input className="h-9" placeholder="Max amount" type="number" min="0" value={maxAmount} onChange={(e) => { setMaxAmount(e.target.value); setPage(1) }} />
           </>
         ) : null}
-      </div>
+      </FilterToolbar>
 
       {data?.summary && (
         <div className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -578,17 +721,24 @@ export default function Expenses() {
       )}
 
       {data?.summary && (
-        <div className="mb-3 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
-          <Card><CardContent className="py-3"><p className="text-[11px] text-muted-foreground">Total Expenditure</p><p className="text-lg font-semibold text-maroon">{formatCurrency(data.summary.total_amount)}</p><p className="text-[11px] text-muted-foreground">{data.summary.expense_count} Vouchers</p></CardContent></Card>
-          <Card><CardContent className="py-3"><p className="text-[11px] text-muted-foreground">This Month</p><p className="text-lg font-semibold">{formatCurrency(data.summary.this_month_amount)}</p></CardContent></Card>
-          <Card><CardContent className="py-3"><p className="text-[11px] text-muted-foreground">Largest Head</p><p className="text-sm font-semibold">{data.summary.largest_head || '—'}</p></CardContent></Card>
-          <Card><CardContent className="py-3"><p className="text-[11px] text-muted-foreground">Cash Payments</p><p className="text-lg font-semibold">{formatCurrency(data.summary.cash_total)}</p></CardContent></Card>
-          <Card><CardContent className="py-3"><p className="text-[11px] text-muted-foreground">Verification Status</p><p className="text-sm font-semibold">{data.summary.pending_verification_count > 0 ? `${data.summary.pending_verification_count} Voucher Pending` : 'All Verified'}</p><p className="text-[11px] text-muted-foreground">{data.summary.missing_attachment_count} Missing Attachments</p></CardContent></Card>
+      <div className="mb-3 grid grid-cols-2 gap-2 xl:grid-cols-5">
+          <CompactStatCard label="Total Expenditure" value={formatCurrency(data.summary.total_amount)} valueClassName="text-maroon" sub={`${data.summary.expense_count} Vouchers`} />
+          <CompactStatCard label="This Month" value={formatCurrency(data.summary.this_month_amount)} />
+          <CompactStatCard label="Largest Head" value={data.summary.largest_head || '—'} valueClassName="text-sm font-semibold" />
+          <CompactStatCard label="Cash Payments" value={formatCurrency(data.summary.cash_total)} />
+          <CompactStatCard
+            className="col-span-2 xl:col-span-1"
+            label="Verification Status"
+            shortLabel="Verification"
+            value={data.summary.pending_verification_count > 0 ? `${data.summary.pending_verification_count} Pending` : 'All Verified'}
+            valueClassName="text-sm font-semibold"
+            sub={`${data.summary.missing_attachment_count} Missing Attachments`}
+          />
         </div>
       )}
 
       {data?.by_category?.length > 0 && (
-        <div className="mb-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="mb-3 grid grid-cols-2 gap-2 xl:grid-cols-4">
           {data.by_category.map((c) => (
             <Card key={c.category} className="border-muted/70">
               <CardHeader className="py-2">
@@ -606,7 +756,7 @@ export default function Expenses() {
         </div>
       )}
 
-      <div className="mb-2 flex flex-wrap items-start justify-between gap-2 rounded-md border bg-muted/20 p-2">
+      <div className="mb-2 flex flex-col gap-2 rounded-md border bg-muted/20 p-2 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
         <div className="min-w-[260px] flex-1">
           {insights.length > 0 ? (
             <>
@@ -691,7 +841,7 @@ export default function Expenses() {
                     <TableCell className="py-2 text-xs">{formatExpenseCategory(e.category)}</TableCell>
                     <TableCell className="py-2 text-xs text-muted-foreground">{e.expense_nature || '—'}</TableCell>
                     <TableCell className="max-w-[220px]">
-                      <p className="truncate text-xs">{e.description}</p>
+                      <p className="truncate text-xs">{formatExpenseParticulars(e)}</p>
                       <p className="text-[11px] text-muted-foreground">{e.transaction_id || e.upi_ref || e.cheque_number || e.reference || 'No reference'}</p>
                       <p className="text-[11px] text-muted-foreground">Entered By: {e.entered_by || 'System'}</p>
                     </TableCell>
@@ -778,12 +928,17 @@ export default function Expenses() {
                 <p className="mb-3 text-sm font-semibold">Expense Details</p>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div>
-                    <Label>Voucher Date</Label>
+                    <RequiredLabel>Voucher Date</RequiredLabel>
                     <Input type="date" max={todayISO()} value={form.expense_date} onChange={(e) => setForm({ ...form, expense_date: e.target.value })} />
                   </div>
                   <div>
-                    <Label>Expense Category</Label>
-                    <Select value={form.category} onValueChange={(v) => setForm({ ...form, category: v })}>
+                    <RequiredLabel>Expense Category</RequiredLabel>
+                    <Select
+                      value={form.category}
+                      onValueChange={(v) =>
+                        setForm({ ...form, category: v, expense_nature: natureForExpenseCategory(v) })
+                      }
+                    >
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
                         {EXPENSE_CATEGORIES.map((c) => (
@@ -793,7 +948,7 @@ export default function Expenses() {
                     </Select>
                   </div>
                   <div>
-                    <Label>Expense Nature</Label>
+                    <RequiredLabel>Expense Nature</RequiredLabel>
                     <Select value={form.expense_nature} onValueChange={(v) => setForm({ ...form, expense_nature: v })}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
@@ -804,8 +959,11 @@ export default function Expenses() {
                     </Select>
                   </div>
                   <div>
-                    <Label>Amount</Label>
+                    <RequiredLabel>Amount</RequiredLabel>
                     <Input type="number" min={0.01} max={MAX_AMOUNT} step="0.01" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
+                    {parseAmount(form.amount) > 0 ? (
+                      <p className="mt-1 text-xs text-muted-foreground">{formatCurrency(parseAmount(form.amount))}</p>
+                    ) : null}
                   </div>
                 </div>
               </div>
@@ -818,7 +976,7 @@ export default function Expenses() {
                     <Input value={paymentChannel} disabled />
                   </div>
                   <div>
-                    <Label>Payment Mode</Label>
+                    <RequiredLabel>Payment Mode</RequiredLabel>
                     <Select value={form.payment_mode} onValueChange={(v) => setForm({ ...form, payment_mode: v })}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
@@ -830,19 +988,19 @@ export default function Expenses() {
                   </div>
                   {paymentMode === 'UPI' ? (
                     <div className="sm:col-span-2">
-                      <Label>UPI Reference Number</Label>
+                      <RequiredLabel>UPI Reference Number</RequiredLabel>
                       <Input value={form.upi_ref} onChange={(e) => setForm({ ...form, upi_ref: e.target.value })} />
                     </div>
                   ) : null}
                   {paymentMode === 'CHEQUE' ? (
                     <div className="sm:col-span-2">
-                      <Label>Cheque Number</Label>
+                      <RequiredLabel>Cheque Number</RequiredLabel>
                       <Input value={form.cheque_number} onChange={(e) => setForm({ ...form, cheque_number: e.target.value })} />
                     </div>
                   ) : null}
                   {BANK_MODES.has(paymentMode) ? (
                     <div className="sm:col-span-2">
-                      <Label>Transaction ID</Label>
+                      <RequiredLabel>Transaction ID</RequiredLabel>
                       <Input value={form.transaction_id} onChange={(e) => setForm({ ...form, transaction_id: e.target.value })} />
                     </div>
                   ) : null}
@@ -853,7 +1011,7 @@ export default function Expenses() {
                 <p className="mb-3 text-sm font-semibold">Vendor / Payee Information</p>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="sm:col-span-2">
-                    <Label>Search Vendor Directory (Optional)</Label>
+                    <RequiredLabel optional>Search Vendor Directory</RequiredLabel>
                     <Input
                       placeholder="Search saved vendors by name or mobile"
                       value={vendorSearch}
@@ -883,13 +1041,18 @@ export default function Expenses() {
                     ) : null}
                   </div>
                   <div>
-                    <Label>Vendor / Payee Name</Label>
+                    <RequiredLabel optional={!createPayeeRequired}>Vendor / Payee Name</RequiredLabel>
                     <Input value={form.paid_to} onChange={(e) => setForm({ ...form, paid_to: e.target.value })} />
                   </div>
                   <div>
-                    <Label>Mobile Number (Optional)</Label>
+                    <RequiredLabel optional>Mobile Number</RequiredLabel>
                     <Input value={form.vendor_mobile} maxLength={10} onChange={(e) => setForm({ ...form, vendor_mobile: e.target.value })} />
                   </div>
+                  <VendorExactMatchBanner
+                    match={createExactVendorMatch}
+                    linked={isVendorLinked(createExactVendorMatch, form.vendor_id)}
+                    onUseExisting={applyExistingVendorToCreate}
+                  />
                   <div className="sm:col-span-2 flex justify-end">
                     <Button type="button" size="sm" variant="outline" onClick={handleSaveVendorFromCreate} disabled={createVendor.isPending}>
                       {createVendor.isPending ? 'Saving Vendor...' : 'Save as Vendor'}
@@ -902,26 +1065,31 @@ export default function Expenses() {
                 <p className="mb-3 text-sm font-semibold">Supporting Information</p>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="sm:col-span-2">
-                    <Label>Description</Label>
+                    <RequiredLabel optional>Description</RequiredLabel>
                     <Textarea className="min-h-[84px]" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
                   </div>
                   <div>
-                    <Label>Upload Bill / Supporting Document</Label>
+                    <RequiredLabel optional>Upload Bill / Supporting Document</RequiredLabel>
                     <Input type="file" accept=".pdf,image/*" onChange={(e) => setForm({ ...form, attachment: e.target.files?.[0] || null })} />
+                    {form.attachment ? (
+                      <p className="mt-1 text-xs text-muted-foreground">{formatAttachmentHint(form.attachment)}</p>
+                    ) : parseAmount(form.amount) >= HIGH_VALUE_ATTACHMENT_THRESHOLD ? (
+                      <p className="mt-1 text-xs text-amber-700">Recommended for amounts ₹5,000 and above</p>
+                    ) : null}
                   </div>
                   <div>
-                    <Label>Additional Notes</Label>
+                    <RequiredLabel optional>Additional Notes</RequiredLabel>
                     <Textarea className="min-h-[84px]" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
                   </div>
                 </div>
               </div>
 
-              <div className="flex justify-end gap-2 border-t pt-4">
+              <FormDialogFooter>
                 <Button variant="outline" onClick={() => setAddOpen(false)}>Cancel</Button>
-                <Button onClick={handleCreate} disabled={!form.amount || !form.description || createExpense.isPending}>
+                <Button onClick={handleCreate} disabled={!form.amount || createExpense.isPending}>
                   {createExpense.isPending ? 'Saving Voucher...' : 'Save Voucher'}
                 </Button>
-              </div>
+              </FormDialogFooter>
             </div>
           ) : (
             <div className="space-y-4">
@@ -988,12 +1156,17 @@ export default function Expenses() {
               <p className="mb-3 text-sm font-semibold">Expense Details</p>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div>
-                  <Label>Voucher Date</Label>
+                  <RequiredLabel>Voucher Date</RequiredLabel>
                   <Input type="date" max={todayISO()} value={editForm.expense_date} onChange={(e) => setEditForm({ ...editForm, expense_date: e.target.value })} />
                 </div>
                 <div>
-                  <Label>Expense Category</Label>
-                  <Select value={editForm.category} onValueChange={(v) => setEditForm({ ...editForm, category: v })}>
+                  <RequiredLabel>Expense Category</RequiredLabel>
+                  <Select
+                    value={editForm.category}
+                    onValueChange={(v) =>
+                      setEditForm({ ...editForm, category: v, expense_nature: natureForExpenseCategory(v) })
+                    }
+                  >
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {EXPENSE_CATEGORIES.map((c) => (
@@ -1003,7 +1176,7 @@ export default function Expenses() {
                   </Select>
                 </div>
                 <div>
-                  <Label>Expense Nature</Label>
+                  <RequiredLabel>Expense Nature</RequiredLabel>
                   <Select value={editForm.expense_nature} onValueChange={(v) => setEditForm({ ...editForm, expense_nature: v })}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -1014,8 +1187,11 @@ export default function Expenses() {
                   </Select>
                 </div>
                 <div>
-                  <Label>Amount</Label>
+                  <RequiredLabel>Amount</RequiredLabel>
                   <Input type="number" min={0.01} max={MAX_AMOUNT} step="0.01" value={editForm.amount} onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })} />
+                  {parseAmount(editForm.amount) > 0 ? (
+                    <p className="mt-1 text-xs text-muted-foreground">{formatCurrency(parseAmount(editForm.amount))}</p>
+                  ) : null}
                 </div>
               </div>
             </div>
@@ -1024,11 +1200,11 @@ export default function Expenses() {
               <p className="mb-3 text-sm font-semibold">Payment Information</p>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div>
-                  <Label>Payment Account</Label>
+                  <Label>Paid Through</Label>
                   <Input value={editPaymentChannel} disabled />
                 </div>
                 <div>
-                  <Label>Payment Mode</Label>
+                  <RequiredLabel>Payment Mode</RequiredLabel>
                   <Select value={editForm.payment_mode} onValueChange={(v) => setEditForm({ ...editForm, payment_mode: v })}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -1040,19 +1216,19 @@ export default function Expenses() {
                 </div>
                 {editPaymentMode === 'UPI' ? (
                   <div className="sm:col-span-2">
-                    <Label>UPI Reference Number</Label>
+                    <RequiredLabel>UPI Reference Number</RequiredLabel>
                     <Input value={editForm.upi_ref} onChange={(e) => setEditForm({ ...editForm, upi_ref: e.target.value })} />
                   </div>
                 ) : null}
                 {editPaymentMode === 'CHEQUE' ? (
                   <div className="sm:col-span-2">
-                    <Label>Cheque Number</Label>
+                    <RequiredLabel>Cheque Number</RequiredLabel>
                     <Input value={editForm.cheque_number} onChange={(e) => setEditForm({ ...editForm, cheque_number: e.target.value })} />
                   </div>
                 ) : null}
                 {BANK_MODES.has(editPaymentMode) ? (
                   <div className="sm:col-span-2">
-                    <Label>Transaction ID</Label>
+                    <RequiredLabel>Transaction ID</RequiredLabel>
                     <Input value={editForm.transaction_id} onChange={(e) => setEditForm({ ...editForm, transaction_id: e.target.value })} />
                   </div>
                 ) : null}
@@ -1063,7 +1239,7 @@ export default function Expenses() {
               <p className="mb-3 text-sm font-semibold">Vendor / Payee Information</p>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="sm:col-span-2">
-                  <Label>Search Vendor Directory (Optional)</Label>
+                  <RequiredLabel optional>Search Vendor Directory</RequiredLabel>
                   <Input
                     placeholder="Search saved vendors by name or mobile"
                     value={editVendorSearch}
@@ -1093,13 +1269,18 @@ export default function Expenses() {
                   ) : null}
                 </div>
                 <div>
-                  <Label>Vendor / Payee Name</Label>
+                  <RequiredLabel optional={!editPayeeRequired}>Vendor / Payee Name</RequiredLabel>
                   <Input value={editForm.paid_to} onChange={(e) => setEditForm({ ...editForm, paid_to: e.target.value })} />
                 </div>
                 <div>
-                  <Label>Mobile Number (Optional)</Label>
+                  <RequiredLabel optional>Mobile Number</RequiredLabel>
                   <Input value={editForm.vendor_mobile} maxLength={10} onChange={(e) => setEditForm({ ...editForm, vendor_mobile: e.target.value })} />
                 </div>
+                <VendorExactMatchBanner
+                  match={editExactVendorMatch}
+                  linked={isVendorLinked(editExactVendorMatch, editForm.vendor_id)}
+                  onUseExisting={applyExistingVendorToEdit}
+                />
                 <div className="sm:col-span-2 flex justify-end">
                   <Button type="button" size="sm" variant="outline" onClick={handleSaveVendorFromEdit} disabled={createVendor.isPending}>
                     {createVendor.isPending ? 'Saving Vendor...' : 'Save as Vendor'}
@@ -1112,26 +1293,26 @@ export default function Expenses() {
               <p className="mb-3 text-sm font-semibold">Supporting Information</p>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="sm:col-span-2">
-                  <Label>Expense Particulars</Label>
+                  <RequiredLabel optional>Expense Particulars</RequiredLabel>
                   <Textarea className="min-h-[84px]" value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} />
                 </div>
                 <div>
-                  <Label>Reference</Label>
+                  <RequiredLabel optional>Reference</RequiredLabel>
                   <Input value={editForm.reference} onChange={(e) => setEditForm({ ...editForm, reference: e.target.value })} />
                 </div>
                 <div>
-                  <Label>Additional Notes</Label>
+                  <RequiredLabel optional>Additional Notes</RequiredLabel>
                   <Textarea className="min-h-[84px]" value={editForm.notes} onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })} />
                 </div>
               </div>
             </div>
 
-            <div className="flex justify-end gap-2 border-t pt-4">
+            <FormDialogFooter>
               <Button variant="outline" onClick={() => setEditOpen(false)}>Cancel</Button>
-              <Button onClick={handleUpdateVoucher} disabled={!editForm.amount || !editForm.description || updateExpense.isPending}>
+              <Button onClick={handleUpdateVoucher} disabled={!editForm.amount || updateExpense.isPending}>
                 {updateExpense.isPending ? 'Saving Changes...' : 'Save Voucher Changes'}
               </Button>
-            </div>
+            </FormDialogFooter>
           </div>
         </DialogContent>
       </Dialog>
@@ -1145,6 +1326,7 @@ export default function Expenses() {
             <div className="grid gap-2 text-sm">
               <p><span className="text-muted-foreground">Voucher:</span> <span className="font-mono">{getVoucherNumber(previewExpense)}</span></p>
               <p><span className="text-muted-foreground">Category:</span> {formatExpenseCategory(previewExpense.category)}</p>
+              <p><span className="text-muted-foreground">Particulars:</span> {formatExpenseParticulars(previewExpense)}</p>
               <p><span className="text-muted-foreground">Amount:</span> <span className="font-semibold">{formatCurrency(previewExpense.amount)}</span></p>
               <p><span className="text-muted-foreground">Reference:</span> {previewExpense.transaction_id || previewExpense.upi_ref || previewExpense.cheque_number || previewExpense.reference || '-'}</p>
               <p><span className="text-muted-foreground">Attachment:</span> {previewExpense.attachment_url ? 'Bill Attached' : 'Missing Bill'}</p>

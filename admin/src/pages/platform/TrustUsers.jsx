@@ -2,10 +2,12 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft, UserPlus } from 'lucide-react'
 import PageHeader from '@/components/layout/PageHeader'
+import HeaderIconButton from '@/components/layout/HeaderIconButton'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import RequiredLabel from '@/components/common/RequiredLabel'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import {
@@ -94,7 +96,12 @@ export default function TrustUsers() {
         </Button>
       </div>
 
-      <PageHeader title={loading ? 'Loading…' : trust?.name || 'Trust users'} description={trust?.name_hindi}>
+      <PageHeader
+        title={loading ? 'Loading…' : trust?.name || 'Trust users'}
+        mobileTitle="Users"
+        description={trust?.name_hindi}
+        mobileAction={<HeaderIconButton icon={UserPlus} label="Add user" onClick={() => setDialogOpen(true)} />}
+      >
         <Button onClick={() => setDialogOpen(true)}>
           <UserPlus className="mr-2 h-4 w-4" />
           Add user
@@ -174,11 +181,11 @@ export default function TrustUsers() {
           </DialogHeader>
           <form onSubmit={createUser} className="space-y-4">
             <div>
-              <Label htmlFor="name">Full name</Label>
+              <RequiredLabel htmlFor="name">Full name</RequiredLabel>
               <Input id="name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} required />
             </div>
             <div>
-              <Label htmlFor="username">Username</Label>
+              <RequiredLabel htmlFor="username">Username</RequiredLabel>
               <Input
                 id="username"
                 value={form.username}
@@ -187,7 +194,7 @@ export default function TrustUsers() {
               />
             </div>
             <div>
-              <Label htmlFor="password">Password</Label>
+              <RequiredLabel htmlFor="password">Temporary password</RequiredLabel>
               <Input
                 id="password"
                 type="password"

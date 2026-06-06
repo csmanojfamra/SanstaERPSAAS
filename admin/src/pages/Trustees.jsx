@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Plus, IndianRupee, MoreVertical, Landmark, ShieldCheck, Phone, Mail } from 'lucide-react'
 import PageHeader from '@/components/layout/PageHeader'
+import HeaderIconButton from '@/components/layout/HeaderIconButton'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -20,6 +21,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import ConfirmActionDialog from '@/components/common/ConfirmActionDialog'
+import RequiredLabel from '@/components/common/RequiredLabel'
+import FormDialogFooter from '@/components/common/FormDialogFooter'
 import EmptyState from '@/components/common/EmptyState'
 import {
   useTrustees,
@@ -30,6 +33,7 @@ import {
 } from '@/hooks/useTrustees'
 import { formatCurrency, formatDate, formatPaymentMode, todayISO } from '@/utils/formatters'
 import { getApiErrorMessage } from '@/lib/api'
+import { confirmBackdatedEntry, parseAmount } from '@/lib/formHelpers'
 import { toast } from '@/hooks/use-toast'
 import { useAuthStore } from '@/store/useAuthStore'
 
@@ -197,6 +201,7 @@ export default function Trustees() {
         })
         return
       }
+      if (trusteeForm.joining_date && !confirmBackdatedEntry(trusteeForm.joining_date, 'joining date')) return
       await createTrustee.mutateAsync(trusteeForm)
       toast({ title: 'Trustee added' })
       setAddOpen(false)
@@ -224,10 +229,16 @@ export default function Trustees() {
   }
 
   const handleContrib = async () => {
+    const amount = parseAmount(contribForm.amount)
+    if (!amount || amount <= 0) {
+      toast({ title: 'Invalid amount', description: 'Enter a valid contribution amount', variant: 'destructive' })
+      return
+    }
+    if (!confirmBackdatedEntry(contribForm.contribution_date, 'contribution')) return
     try {
       await createContribution.mutateAsync({
         trusteeId: contribOpen.id,
-        amount: parseFloat(contribForm.amount),
+        amount,
         contribution_date: contribForm.contribution_date,
         payment_mode: contribForm.payment_mode,
         remarks: contribForm.remarks || undefined,
@@ -302,6 +313,7 @@ export default function Trustees() {
         })
         return
       }
+      if (trusteeForm.joining_date && !confirmBackdatedEntry(trusteeForm.joining_date, 'joining date')) return
       await updateTrustee.mutateAsync({ id: selectedTrustee.id, ...trusteeForm })
       toast({ title: 'Trustee updated' })
       setEditOpen(false)
@@ -313,30 +325,52 @@ export default function Trustees() {
 
   return (
     <>
-      <PageHeader title="Trust Governance" description="Manage office bearers, trustees and governance roles.">
-        <div className="flex flex-wrap gap-2">
-          <div className="inline-flex rounded-lg border bg-background p-1">
-            <Button
-              variant={viewMode === 'board' ? 'default' : 'ghost'}
-              size="sm"
-              onClick={() => setViewMode('board')}
-            >
-              Board View
-            </Button>
-            <Button
-              variant={viewMode === 'register' ? 'default' : 'ghost'}
-              size="sm"
-              onClick={() => setViewMode('register')}
-            >
-              Register View
-            </Button>
-          </div>
-          <Button onClick={() => setAddOpen(true)}>
-            <Plus className="h-4 w-4" />
-            Add Office Bearer
+      <PageHeader
+        title="Trust Governance"
+        mobileTitle="Trustees"
+        description="Manage office bearers, trustees and governance roles."
+        mobileAction={<HeaderIconButton icon={Plus} label="Add office bearer" onClick={() => setAddOpen(true)} />}
+      >
+        <div className="inline-flex rounded-lg border bg-background p-1">
+          <Button
+            variant={viewMode === 'board' ? 'default' : 'ghost'}
+            size="sm"
+            onClick={() => setViewMode('board')}
+          >
+            Board View
+          </Button>
+          <Button
+            variant={viewMode === 'register' ? 'default' : 'ghost'}
+            size="sm"
+            onClick={() => setViewMode('register')}
+          >
+            Register View
           </Button>
         </div>
+        <Button onClick={() => setAddOpen(true)}>
+          <Plus className="h-4 w-4" />
+          Add Office Bearer
+        </Button>
       </PageHeader>
+
+      <div className="mb-3 flex gap-1 sm:hidden">
+        <Button
+          className="flex-1"
+          size="sm"
+          variant={viewMode === 'board' ? 'default' : 'outline'}
+          onClick={() => setViewMode('board')}
+        >
+          Board
+        </Button>
+        <Button
+          className="flex-1"
+          size="sm"
+          variant={viewMode === 'register' ? 'default' : 'outline'}
+          onClick={() => setViewMode('register')}
+        >
+          Register
+        </Button>
+      </div>
 
       {isError && (
         <Alert variant="destructive" className="mb-4">
@@ -716,7 +750,7 @@ export default function Trustees() {
               </div>
             </div>
 
-            <div className="flex justify-end gap-2 border-t pt-4">
+            <FormDialogFooter>
               <Button type="button" variant="outline" onClick={() => setAddOpen(false)}>
                 Cancel
               </Button>
@@ -726,7 +760,7 @@ export default function Trustees() {
               >
                 {createTrustee.isPending ? 'Saving Trustee...' : 'Save Trustee'}
               </Button>
-            </div>
+            </FormDialogFooter>
           </div>
         </DialogContent>
       </Dialog>
@@ -868,14 +902,14 @@ export default function Trustees() {
               </div>
             </div>
 
-            <div className="flex justify-end gap-2 border-t pt-4">
+            <FormDialogFooter>
               <Button type="button" variant="outline" onClick={() => setEditOpen(false)}>
                 Cancel
               </Button>
               <Button onClick={handleUpdateTrustee} disabled={!trusteeForm.name || !trusteeForm.role || updateTrustee.isPending}>
                 {updateTrustee.isPending ? 'Saving Changes...' : 'Save Changes'}
               </Button>
-            </div>
+            </FormDialogFooter>
           </div>
         </DialogContent>
       </Dialog>
@@ -933,10 +967,10 @@ export default function Trustees() {
             <DialogDescription>{contribOpen?.name}</DialogDescription>
           </DialogHeader>
           <div className="grid gap-3">
-            <div><Label>Amount *</Label><Input type="number" value={contribForm.amount} onChange={(e) => setContribForm({ ...contribForm, amount: e.target.value })} /></div>
-            <div><Label>Date *</Label><Input type="date" value={contribForm.contribution_date} onChange={(e) => setContribForm({ ...contribForm, contribution_date: e.target.value })} /></div>
+            <div><RequiredLabel>Amount</RequiredLabel><Input type="number" min={0.01} step="0.01" value={contribForm.amount} onChange={(e) => setContribForm({ ...contribForm, amount: e.target.value })} /></div>
+            <div><RequiredLabel>Date</RequiredLabel><Input type="date" max={todayISO()} value={contribForm.contribution_date} onChange={(e) => setContribForm({ ...contribForm, contribution_date: e.target.value })} /></div>
             <div>
-              <Label>Payment mode</Label>
+              <RequiredLabel>Payment mode</RequiredLabel>
               <Select value={contribForm.payment_mode} onValueChange={(v) => setContribForm({ ...contribForm, payment_mode: v })}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -946,7 +980,12 @@ export default function Trustees() {
                 </SelectContent>
               </Select>
             </div>
-            <Button onClick={handleContrib} disabled={!contribForm.amount || createContribution.isPending}>Record</Button>
+            <FormDialogFooter>
+              <Button variant="outline" onClick={() => setContribOpen(null)}>Cancel</Button>
+              <Button onClick={handleContrib} disabled={!contribForm.amount || createContribution.isPending}>
+                {createContribution.isPending ? 'Saving…' : 'Record'}
+              </Button>
+            </FormDialogFooter>
           </div>
         </DialogContent>
       </Dialog>

@@ -34,3 +34,21 @@
     @apply bg-cream text-foreground antialiased;
   }
 }
+
+@layer components {
+  .filter-grid {
+    @apply mb-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4;
+  }
+
+  .period-bar {
+    @apply mb-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center;
+  }
+
+  .period-bar > .period-bar-field {
+    @apply w-full sm:w-auto sm:min-w-[150px];
+  }
+
+  .period-bar-range {
+    @apply inline-flex min-h-10 w-full items-center rounded-md border border-input bg-background px-3 text-xs font-medium text-foreground sm:min-h-9 sm:w-auto sm:text-sm;
+  }
+}

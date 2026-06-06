@@ -9,10 +9,14 @@ async function main() {
 
   const trust = await prisma.trust.upsert({
     where: { id: 'clsanwaliya001' },
-    update: { slug: 'sanwaliya-seth-deoli' },
+    update: {
+      slug: 'sanwaliya-seth-deoli',
+      custom_domain: 'manage.sanwaliyasethdeoli.in',
+    },
     create: {
       id: 'clsanwaliya001',
       slug: 'sanwaliya-seth-deoli',
+      custom_domain: 'manage.sanwaliyasethdeoli.in',
       name: 'Shri Sanwaliya Seth Mandir Nirman Samiti',
       name_hindi: 'श्री सांवलिया सेठ मंदिर निर्माण समिति',
       address: 'Near Power House, Kuchalwara Road, Hanuman Nagar, Jahajpur, Bhilwara',

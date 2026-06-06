@@ -9,6 +9,7 @@ import { useAuthStore } from '@/store/useAuthStore'
 import api, { getApiErrorMessage } from '@/lib/api'
 import { toast } from '@/hooks/use-toast'
 import ConfirmActionDialog from '@/components/common/ConfirmActionDialog'
+import RequiredLabel from '@/components/common/RequiredLabel'
 import SettingsTeamUsers from '@/components/settings/SettingsTeamUsers'
 
 const SETTINGS_NAV = [
@@ -26,17 +27,17 @@ const SETTINGS_NAV = [
 
 function SectionHeader({ title, description, saveLabel = 'Save Changes', onSave, onReset, saving, dirty }) {
   return (
-    <div className="flex flex-wrap items-start justify-between gap-3">
-      <div>
+    <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
+      <div className="min-w-0">
         <h3 className="text-sm font-semibold">{title}</h3>
         <p className="text-xs text-muted-foreground">{description}</p>
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
         <span className={`text-xs ${dirty ? 'text-amber-700' : 'text-emerald-700'}`}>
           {saving ? 'Saving...' : dirty ? 'Unsaved changes' : 'Saved successfully'}
         </span>
-        <Button size="sm" variant="outline" onClick={onReset}>Reset</Button>
-        <Button size="sm" onClick={onSave} disabled={saving}>{saveLabel}</Button>
+        <Button size="sm" variant="outline" className="w-full sm:w-auto" onClick={onReset}>Reset</Button>
+        <Button size="sm" className="w-full sm:w-auto" onClick={onSave} disabled={saving}>{saveLabel}</Button>
       </div>
     </div>
   )
@@ -322,19 +323,20 @@ export default function Settings() {
     <>
       <PageHeader
         title="Trust Administration & Settings"
+        mobileTitle="Settings"
         description="Manage trust identity, financial preferences, receipt controls, branding and security settings."
       />
 
       <div className="grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)]">
-        <Card className="h-max lg:sticky lg:top-20">
+        <Card className="h-max overflow-hidden lg:sticky lg:top-20">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm">Configuration Sections</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-1">
+          <CardContent className="flex gap-1 overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch] lg:flex-col lg:space-y-1 lg:overflow-visible lg:pb-0">
             {SETTINGS_NAV.map((item) => (
               <button
                 key={item.id}
-                className={`w-full rounded-md px-2 py-1.5 text-left text-sm ${activeSection === item.id ? 'bg-maroon text-white' : 'hover:bg-muted'}`}
+                className={`shrink-0 rounded-md px-3 py-2 text-left text-sm lg:w-full lg:px-2 lg:py-1.5 ${activeSection === item.id ? 'bg-maroon text-white' : 'hover:bg-muted'}`}
                 onClick={() => document.getElementById(item.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
               >
                 {item.label}
@@ -605,16 +607,16 @@ export default function Settings() {
                   <input type="checkbox" className="h-4 w-4" checked={showPassword} onChange={(e) => setShowPassword(e.target.checked)} />
                 </div>
                 <div>
-                  <Label>Current password</Label>
+                  <RequiredLabel>Current password</RequiredLabel>
                   <Input type={showPassword ? 'text' : 'password'} value={passwords.current_password} onChange={(e) => setPasswords({ ...passwords, current_password: e.target.value })} required />
                 </div>
                 <div>
-                  <Label>New password</Label>
+                  <RequiredLabel>New password</RequiredLabel>
                   <Input type={showPassword ? 'text' : 'password'} value={passwords.new_password} onChange={(e) => setPasswords({ ...passwords, new_password: e.target.value })} required />
                   <PasswordStrength value={passwords.new_password} />
                 </div>
                 <div>
-                  <Label>Confirm new password</Label>
+                  <RequiredLabel>Confirm new password</RequiredLabel>
                   <Input type={showPassword ? 'text' : 'password'} value={passwords.confirm} onChange={(e) => setPasswords({ ...passwords, confirm: e.target.value })} required />
                 </div>
                 <div className="flex flex-wrap gap-2">

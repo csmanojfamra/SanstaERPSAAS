@@ -3,6 +3,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import RequiredLabel from '@/components/common/RequiredLabel'
+import FormDialogFooter from '@/components/common/FormDialogFooter'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import {
@@ -151,13 +153,13 @@ export default function SettingsTeamUsers() {
                 Login link: <span className="font-mono text-foreground">{loginUrl}</span>
               </p>
             ) : null}
-            <Button size="sm" onClick={saveTenantAccess} disabled={saving || !slug}>
+            <Button size="sm" className="w-full sm:w-auto" onClick={saveTenantAccess} disabled={saving || !slug}>
               Save login URL
             </Button>
           </div>
 
-          <div className="flex justify-end">
-            <Button onClick={() => setDialogOpen(true)}>Add user</Button>
+          <div className="flex justify-stretch sm:justify-end">
+            <Button className="w-full sm:w-auto" onClick={() => setDialogOpen(true)}>Add user</Button>
           </div>
 
           {loading ? (
@@ -227,7 +229,7 @@ export default function SettingsTeamUsers() {
           </DialogHeader>
           <form onSubmit={createUser} className="space-y-4">
             <div>
-              <Label htmlFor="member-name">Full name</Label>
+              <RequiredLabel htmlFor="member-name">Full name</RequiredLabel>
               <Input
                 id="member-name"
                 value={form.name}
@@ -236,7 +238,7 @@ export default function SettingsTeamUsers() {
               />
             </div>
             <div>
-              <Label htmlFor="member-username">Username</Label>
+              <RequiredLabel htmlFor="member-username">Username</RequiredLabel>
               <Input
                 id="member-username"
                 value={form.username}
@@ -245,7 +247,7 @@ export default function SettingsTeamUsers() {
               />
             </div>
             <div>
-              <Label htmlFor="member-password">Temporary password</Label>
+              <RequiredLabel htmlFor="member-password">Temporary password</RequiredLabel>
               <Input
                 id="member-password"
                 type="password"
@@ -286,7 +288,7 @@ export default function SettingsTeamUsers() {
           </DialogHeader>
           <form onSubmit={submitPasswordReset} className="space-y-4">
             <div>
-              <Label htmlFor="reset-password">New password</Label>
+              <RequiredLabel htmlFor="reset-password">New password</RequiredLabel>
               <Input
                 id="reset-password"
                 type="password"

@@ -458,7 +458,7 @@ router.get('/dashboard', async (req, res, next) => {
       )
     )
 
-    const [donationsTrend, expensesTrend, paymentModes, expenseCategories, dailyDonations, topDonorsRaw, recentActivity, pendingReconciliation, recentDonations, recentExpenses, recentExports] =
+    const [donationsTrend, expensesTrend, paymentModes, expenseCategories, dailyDonations, topDonorsRaw, recentActivity, pendingReconciliation, receiptRegenerateCount, recentDonations, recentExpenses, recentExports] =
       await Promise.all([
         prisma.donation.findMany({
           where: {
@@ -509,19 +509,38 @@ router.get('/dashboard', async (req, res, next) => {
           _count: { id: true },
         }),
         prisma.auditLog.findMany({
-          where: { trust_id: trustId },
+          where: {
+            trust_id: trustId,
+            created_at: { gte: selectedRange.dateFrom, lte: selectedRange.dateTo },
+          },
           orderBy: { created_at: 'desc' },
           take: 15,
           include: { user: { select: { id: true, name: true, username: true } } },
         }),
         prisma.$transaction([
           prisma.donation.count({
-            where: { trust_id: trustId, is_deleted: false, is_reconciled: false },
+            where: {
+              trust_id: trustId,
+              is_deleted: false,
+              is_reconciled: false,
+              donation_date: { gte: selectedRange.dateFrom, lte: selectedRange.dateTo },
+            },
           }),
           prisma.expense.count({
-            where: { trust_id: trustId, is_reconciled: false },
+            where: {
+              trust_id: trustId,
+              is_reconciled: false,
+              expense_date: { gte: selectedRange.dateFrom, lte: selectedRange.dateTo },
+            },
           }),
         ]),
+        prisma.auditLog.count({
+          where: {
+            trust_id: trustId,
+            action: 'RECEIPT_REGENERATE',
+            created_at: { gte: selectedRange.dateFrom, lte: selectedRange.dateTo },
+          },
+        }),
         prisma.donation.findMany({
           where: {
             ...donationWhere,
@@ -695,6 +714,17 @@ router.get('/dashboard', async (req, res, next) => {
         donations: pendingReconciliation[0],
         expenses: pendingReconciliation[1],
         total: pendingReconciliation[0] + pendingReconciliation[1],
+        period: selectedRange.period,
+        label: selectedRange.label,
+        date_from: selectedRange.dateFrom.toISOString().slice(0, 10),
+        date_to: selectedRange.dateTo.toISOString().slice(0, 10),
+      },
+      risk_activity: {
+        receipt_regenerate_count: receiptRegenerateCount,
+        period: selectedRange.period,
+        label: selectedRange.label,
+        date_from: selectedRange.dateFrom.toISOString().slice(0, 10),
+        date_to: selectedRange.dateTo.toISOString().slice(0, 10),
       },
     })
   } catch (err) {

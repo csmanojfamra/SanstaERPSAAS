@@ -15,6 +15,9 @@ import {
 import { Fragment, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import PageHeader from '@/components/layout/PageHeader'
+import FilterToolbar from '@/components/common/FilterToolbar'
+import CompactStatCard from '@/components/common/CompactStatCard'
+import { MobileActionsSheetTrigger } from '@/components/common/MobileActionsSheet'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -24,7 +27,7 @@ import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import NotificationsPanel from '@/components/dashboard/NotificationsPanel'
 import { useAnalyticsDashboard, useNotifications } from '@/hooks/useAnalytics'
-import { formatCurrency } from '@/utils/formatters'
+import { formatCurrency, todayISO } from '@/utils/formatters'
 import {
   IndianRupee,
   TrendingUp,
@@ -44,6 +47,33 @@ import EmptyState from '@/components/common/EmptyState'
 import TableLoadingSkeleton from '@/components/common/TableLoadingSkeleton'
 import { useAuthStore } from '@/store/useAuthStore'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { cn } from '@/lib/utils'
+
+const QUICK_ACTIONS = [
+  { to: '/donations', label: 'Record Donation', icon: PlusCircle },
+  { to: '/expenses', label: 'Record Expense', icon: Wallet },
+  { to: '/trustees', label: 'Add Trustee', icon: Building2 },
+  { to: '/reconciliation', label: 'Reconcile Entries', icon: ClipboardCheck },
+  { to: '/reports', label: 'Generate Report', icon: FileText },
+]
+
+function DashboardPeriodSelect({ period, onPeriodChange, triggerClassName }) {
+  return (
+    <Select value={period} onValueChange={onPeriodChange}>
+      <SelectTrigger className={cn('h-9 text-sm', triggerClassName)}>
+        <SelectValue placeholder="Select period" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="TODAY">Today</SelectItem>
+        <SelectItem value="WEEKLY">This Week</SelectItem>
+        <SelectItem value="MONTHLY">Monthly</SelectItem>
+        <SelectItem value="QUARTERLY">Quarterly</SelectItem>
+        <SelectItem value="YEARLY">Yearly</SelectItem>
+        <SelectItem value="CUSTOM">Custom Date</SelectItem>
+      </SelectContent>
+    </Select>
+  )
+}
 
 const CHART_COLORS = ['#FF8C33', '#7B1C1C', '#C9A84C', '#A56A46', '#9B2C2C', '#5C1515']
 const CHART_THEME = {
@@ -86,8 +116,27 @@ function formatCompactAxisValue(value) {
   return String(num)
 }
 
-function todayISO() {
-  return new Date().toISOString().slice(0, 10)
+function periodScopeLabel(period, selectedLabel, activeRangeLabel) {
+  switch (period) {
+    case 'TODAY':
+      return 'today'
+    case 'WEEKLY':
+      return 'this week'
+    case 'MONTHLY':
+      return 'this month'
+    case 'QUARTERLY':
+      return 'this quarter'
+    case 'YEARLY':
+      return 'this year'
+    case 'CUSTOM':
+      return activeRangeLabel || 'the selected period'
+    default:
+      return selectedLabel ? selectedLabel.toLowerCase() : 'the selected period'
+  }
+}
+
+function plural(count, singular, pluralForm = `${singular}s`) {
+  return count === 1 ? singular : pluralForm
 }
 
 function shiftDateIso(days) {
@@ -158,21 +207,21 @@ function roleConfig(role) {
 function KpiCard({ title, value, sub, trendLabel, trendPositive, icon: Icon, loading }) {
   return (
     <Card className="border-border/80 h-full">
-      <CardHeader className="flex flex-row items-start justify-between pb-1 px-4 pt-3">
-        <CardTitle className="text-[11px] font-semibold tracking-wide text-muted-foreground">
+      <CardHeader className="flex flex-row items-start justify-between gap-1 pb-0 px-3 pt-2.5 sm:pb-1 sm:px-4 sm:pt-3">
+        <CardTitle className="text-xs font-semibold leading-snug text-muted-foreground sm:text-[11px] sm:tracking-wide">
           {title}
         </CardTitle>
-        <span className="rounded-md bg-muted p-1.5">
-          <Icon className="h-3.5 w-3.5 text-saffron-dark" />
+        <span className="shrink-0 rounded-md bg-muted p-1 sm:p-1.5">
+          <Icon className="h-3 w-3 text-saffron-dark sm:h-3.5 sm:w-3.5" />
         </span>
       </CardHeader>
-      <CardContent className="space-y-1 px-4 pb-3 pt-0 min-h-[92px] flex flex-col justify-end">
+      <CardContent className="space-y-0.5 px-3 pb-2.5 pt-1 min-h-0 sm:min-h-[92px] sm:space-y-1 sm:px-4 sm:pb-3 sm:pt-0 sm:flex sm:flex-col sm:justify-end">
         {loading ? (
           <Skeleton className="h-8 w-28" />
         ) : (
           <>
-            <p className="text-[30px] font-semibold leading-tight text-foreground">{value}</p>
-            {sub && <p className="text-[11px] text-muted-foreground line-clamp-1">{sub}</p>}
+            <p className="text-xl font-semibold leading-tight tabular-nums text-foreground sm:text-2xl lg:text-[30px]">{value}</p>
+            {sub && <p className="text-[10px] text-muted-foreground line-clamp-2 sm:text-[11px] sm:line-clamp-1">{sub}</p>}
             {trendLabel ? (
               <p className="flex items-center gap-1 text-[11px]">
                 {trendPositive ? (
@@ -194,6 +243,7 @@ export default function Dashboard() {
   const [period, setPeriod] = useState('MONTHLY')
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo] = useState('')
+  const quickSheetActions = QUICK_ACTIONS.map(({ to, label, icon }) => ({ key: to, label, icon, to }))
   const analyticsParams = useMemo(() => {
     if (period === 'TODAY') return { period: 'CUSTOM', date_from: todayISO(), date_to: todayISO() }
     if (period === 'WEEKLY') return { period: 'CUSTOM', date_from: shiftDateIso(-6), date_to: todayISO() }
@@ -257,19 +307,21 @@ export default function Dashboard() {
   const minimumTrendDays = 30
   const trendReadiness = Math.min(100, Math.round((dailyDataPoints / minimumTrendDays) * 100))
   const paymentLead = paymentData[0]
+  const periodScope = periodScopeLabel(period, selectedLabel, activeRangeLabel)
   const settlementTotal = Number(data?.pending_reconciliation?.total || 0)
+  const receiptRegenerateCount = Number(data?.risk_activity?.receipt_regenerate_count || 0)
   const financialHealthTone =
     periodNet > 0 ? 'text-emerald-700' : periodNet < 0 ? 'text-red-700' : 'text-amber-700'
   const financialHealthMessage =
     periodNet > 0
-      ? `${selectedLabel} collections are higher than expenditure by ${formatCurrency(periodNet)}.`
+      ? `For ${periodScope}, collections are higher than expenditure by ${formatCurrency(periodNet)}.`
       : periodNet < 0
-        ? `${selectedLabel} expenditure exceeded collections by ${formatCurrency(Math.abs(periodNet))}.`
-        : `Collections and expenditure are balanced for the selected ${selectedLabel.toLowerCase()} period.`
+        ? `For ${periodScope}, expenditure exceeded collections by ${formatCurrency(Math.abs(periodNet))}.`
+        : `Collections and expenditure are balanced for ${periodScope}.`
   const settlementMessage =
     settlementTotal === 0
-      ? 'Reconciliation status is healthy. No pending items.'
-      : `${settlementTotal} entries need reconciliation attention.`
+      ? `No pending reconciliation items for ${periodScope}.`
+      : `${settlementTotal} ${plural(settlementTotal, 'entry', 'entries')} need reconciliation attention for ${periodScope}.`
   const dashboardRoleConfig = roleConfig(userRole)
   const largestDonor = topDonors[0]
   const todayVsMonthHint = monthDon > 0 ? `${compactPercentage(data?.today?.donation_amount || 0, monthDon)}% of this month` : 'First collection for this month'
@@ -285,7 +337,7 @@ export default function Dashboard() {
       ? {
           id: 'reconciliation-pending',
           severity: settlementTotal > 5 ? 'critical' : 'warning',
-          message: `${settlementTotal} reconciliation items pending review.`,
+          message: `${settlementTotal} ${plural(settlementTotal, 'reconciliation item')} pending review for ${periodScope}.`,
           actionLabel: 'Review Register',
           actionTo: '/reconciliation',
         }
@@ -294,16 +346,16 @@ export default function Dashboard() {
       ? {
           id: 'net-deficit',
           severity: 'warning',
-          message: `Expenditure exceeded collections by ${formatCurrency(Math.abs(periodNet))}.`,
+          message: `For ${periodScope}, expenditure exceeded collections by ${formatCurrency(Math.abs(periodNet))}.`,
           actionLabel: 'Open Reports',
           actionTo: '/reports',
         }
       : null,
-    (quickFeed || []).some((x) => String(x.action).toUpperCase() === 'RECEIPT_REGENERATE')
+    receiptRegenerateCount > 0
       ? {
           id: 'receipt-regenerated',
           severity: 'warning',
-          message: 'Receipt regeneration activity detected in selected range.',
+          message: `${receiptRegenerateCount} receipt ${plural(receiptRegenerateCount, 'regeneration', 'regenerations')} recorded for ${periodScope}.`,
           actionLabel: 'Open Audit Trail',
           actionTo: '/audit-logs',
         }
@@ -367,10 +419,10 @@ export default function Dashboard() {
     ),
     settlement: (
       <KpiCard
-        title="Pending Reconciliation"
+        title={`Pending Reconciliation (${selectedLabel})`}
         value={String(data?.pending_reconciliation?.total ?? 0)}
-        sub={`${data?.pending_reconciliation?.donations ?? 0} receipts · ${data?.pending_reconciliation?.expenses ?? 0} payments`}
-        trendLabel={(data?.pending_reconciliation?.total || 0) > 0 ? 'Requires review' : `No pending items · ${new Date().toLocaleTimeString('en-IN')}`}
+        sub={`${data?.pending_reconciliation?.donations ?? 0} receipts · ${data?.pending_reconciliation?.expenses ?? 0} payments · ${periodScope}`}
+        trendLabel={(data?.pending_reconciliation?.total || 0) > 0 ? `Requires review for ${periodScope}` : `No pending items for ${periodScope}`}
         trendPositive={(data?.pending_reconciliation?.total || 0) === 0}
         icon={ClipboardCheck}
         loading={isLoading}
@@ -514,75 +566,52 @@ export default function Dashboard() {
     <>
       <PageHeader
         title="Trust Operations Dashboard"
-        description={`Monitor collections, expenditure, reconciliation status and operational activities across the trust. (${dashboardRoleConfig.roleLabel})`}
+        mobileTitle="Dashboard"
+        description={`Monitor collections, expenditure, reconciliation status and operational activities. (${dashboardRoleConfig.roleLabel})`}
+        mobileAction={
+          <MobileActionsSheetTrigger
+            title="Quick Action"
+            sheetLabel="Quick actions"
+            sheetIcon={PlusCircle}
+            actions={quickSheetActions}
+          />
+        }
       >
-        <div className="flex w-full justify-end">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button className="h-9 gap-1.5 bg-gradient-to-r from-saffron to-saffron-dark px-4 text-white shadow-sm transition-all hover:from-saffron-dark hover:to-maroon hover:shadow-md focus-visible:ring-saffron/40">
-                <PlusCircle className="h-4 w-4" />
-                Quick Action
-                <ChevronDown className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56 border-border/80 shadow-lg">
-              <DropdownMenuItem asChild className="group">
-                <Link to="/donations" className="flex items-center gap-2">
-                  <PlusCircle className="h-4 w-4 text-saffron-dark transition-colors group-focus:text-maroon" />
-                  Record Donation
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button className="h-9 gap-1.5 bg-gradient-to-r from-saffron to-saffron-dark px-4 text-white shadow-sm transition-all hover:from-saffron-dark hover:to-maroon hover:shadow-md focus-visible:ring-saffron/40">
+              <PlusCircle className="h-4 w-4" />
+              Quick Action
+              <ChevronDown className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56 border-border/80 shadow-lg">
+            {QUICK_ACTIONS.map(({ to, label, icon: Icon }) => (
+              <DropdownMenuItem key={to} asChild className="group">
+                <Link to={to} className="flex items-center gap-2">
+                  <Icon className="h-4 w-4 text-saffron-dark transition-colors group-focus:text-maroon" />
+                  {label}
                 </Link>
               </DropdownMenuItem>
-              <DropdownMenuItem asChild className="group">
-                <Link to="/expenses" className="flex items-center gap-2">
-                  <Wallet className="h-4 w-4 text-saffron-dark transition-colors group-focus:text-maroon" />
-                  Record Expense
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild className="group">
-                <Link to="/trustees" className="flex items-center gap-2">
-                  <Building2 className="h-4 w-4 text-saffron-dark transition-colors group-focus:text-maroon" />
-                  Add Trustee
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild className="group">
-                <Link to="/reconciliation" className="flex items-center gap-2">
-                  <ClipboardCheck className="h-4 w-4 text-saffron-dark transition-colors group-focus:text-maroon" />
-                  Reconcile Entries
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild className="group">
-                <Link to="/reports" className="flex items-center gap-2">
-                  <FileText className="h-4 w-4 text-saffron-dark transition-colors group-focus:text-maroon" />
-                  Generate Report
-                </Link>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </PageHeader>
 
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <Select value={period} onValueChange={setPeriod}>
-          <SelectTrigger className="h-9 w-[170px] text-sm">
-            <SelectValue placeholder="Select period" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="TODAY">Today</SelectItem>
-            <SelectItem value="WEEKLY">This Week</SelectItem>
-            <SelectItem value="MONTHLY">Monthly</SelectItem>
-            <SelectItem value="QUARTERLY">Quarterly</SelectItem>
-            <SelectItem value="YEARLY">Yearly</SelectItem>
-            <SelectItem value="CUSTOM">Custom Date</SelectItem>
-          </SelectContent>
-        </Select>
+      <FilterToolbar layout="period">
+        <DashboardPeriodSelect
+          period={period}
+          onPeriodChange={setPeriod}
+          triggerClassName="period-bar-field min-w-0 flex-1 border-0 bg-muted/50 shadow-none focus:ring-0 sm:flex-none sm:border sm:bg-background sm:shadow-sm"
+        />
         {period === 'CUSTOM' ? (
-          <>
+          <div className="grid w-full grid-cols-2 gap-2 sm:contents">
             <input
               type="date"
               value={customFrom}
               max={customTo || todayISO()}
               onChange={(e) => setCustomFrom(e.target.value)}
-              className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+              className="period-bar-field h-9 rounded-md border border-input bg-background px-2 text-sm"
               aria-label="Custom period start date"
             />
             <input
@@ -591,25 +620,33 @@ export default function Dashboard() {
               min={customFrom || undefined}
               max={todayISO()}
               onChange={(e) => setCustomTo(e.target.value)}
-              className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+              className="period-bar-field h-9 rounded-md border border-input bg-background px-2 text-sm"
               aria-label="Custom period end date"
             />
-          </>
+          </div>
         ) : null}
-        <div className="inline-flex h-9 items-center rounded-md border border-input bg-background px-3 text-sm font-medium text-foreground">
-          Active Range: {activeRangeLabel}
+        <p className="w-full truncate text-[11px] text-muted-foreground sm:hidden">{activeRangeLabel}</p>
+        <div className="period-bar-range hidden sm:inline-flex">
+          <span className="truncate">Active Range: {activeRangeLabel}</span>
         </div>
+      </FilterToolbar>
+
+      <div className="mb-3 grid grid-cols-2 gap-2 lg:grid-cols-5">
+        <CompactStatCard label="Receipts Issued Today" value={data?.today?.donations ?? 0} />
+        <CompactStatCard label="Expenses Recorded Today" value={data?.today?.expenses ?? 0} />
+        <CompactStatCard shortLabel="Pending Approvals" label={`Pending Approvals (${selectedLabel})`} value={settlementTotal} />
+        <CompactStatCard
+          label="Reconciled Entries"
+          value={Math.max(0, Number(data?.today?.donations || 0) - settlementTotal)}
+        />
+        <CompactStatCard
+          shortLabel="Receipts Regenerated"
+          label={`Receipts Regenerated (${selectedLabel})`}
+          value={receiptRegenerateCount}
+        />
       </div>
 
-      <div className="mb-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
-        <Card><CardContent className="p-3"><p className="text-[11px] text-muted-foreground">Receipts Issued Today</p><p className="text-lg font-semibold">{data?.today?.donations ?? 0}</p></CardContent></Card>
-        <Card><CardContent className="p-3"><p className="text-[11px] text-muted-foreground">Expenses Recorded Today</p><p className="text-lg font-semibold">{data?.today?.expenses ?? 0}</p></CardContent></Card>
-        <Card><CardContent className="p-3"><p className="text-[11px] text-muted-foreground">Pending Approvals</p><p className="text-lg font-semibold">{settlementTotal}</p></CardContent></Card>
-        <Card><CardContent className="p-3"><p className="text-[11px] text-muted-foreground">Reconciled Entries</p><p className="text-lg font-semibold">{Math.max(0, Number(data?.today?.donations || 0) - settlementTotal)}</p></CardContent></Card>
-        <Card><CardContent className="p-3"><p className="text-[11px] text-muted-foreground">Receipts Regenerated</p><p className="text-lg font-semibold">{quickFeed.filter((x) => String(x.action).toUpperCase() === 'RECEIPT_REGENERATE').length}</p></CardContent></Card>
-      </div>
-
-      <div className="grid gap-2 sm:grid-cols-2 sm:gap-3 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-4">
         {dashboardRoleConfig.kpiOrder.map((cardKey) => (
           <div key={cardKey}>{kpiCards[cardKey]}</div>
         ))}
@@ -631,16 +668,16 @@ export default function Dashboard() {
         <CardContent className="space-y-2 pt-0">
           {riskSignals.length ? (
             riskSignals.map((signal) => (
-              <div key={signal.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border bg-muted/20 px-2.5 py-2">
-                <div className="inline-flex items-center gap-2 text-sm">
+              <div key={signal.id} className="flex flex-col gap-2 rounded-md border bg-muted/20 px-2.5 py-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+                <div className="inline-flex min-w-0 items-start gap-2 text-sm sm:items-center">
                   <span
-                    className={`h-2 w-2 rounded-full ${
+                    className={`mt-1.5 h-2 w-2 shrink-0 rounded-full sm:mt-0 ${
                       signal.severity === 'critical' ? 'bg-red-600' : 'bg-amber-500'
                     }`}
                   />
-                  <span>{signal.message}</span>
+                  <span className="min-w-0">{signal.message}</span>
                 </div>
-                <Button asChild variant="ghost" className="h-7 px-2 text-xs">
+                <Button asChild variant="ghost" className="h-9 w-full px-2 text-xs sm:h-7 sm:w-auto">
                   <Link to={signal.actionTo}>{signal.actionLabel}</Link>
                 </Button>
               </div>

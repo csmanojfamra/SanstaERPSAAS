@@ -4,6 +4,7 @@ import PageHeader from '@/components/layout/PageHeader'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import RequiredLabel from '@/components/common/RequiredLabel'
 import { Button } from '@/components/ui/button'
 import api, { getApiErrorMessage } from '@/lib/api'
 import { toast } from '@/hooks/use-toast'
@@ -83,6 +84,7 @@ export default function OnboardTrust() {
     <div className="mx-auto max-w-3xl space-y-6">
       <PageHeader
         title="Onboard new trust"
+        mobileTitle="Onboard"
         description="Create a new temple trust / NGO tenant and its first administrator login."
       />
 
@@ -94,7 +96,7 @@ export default function OnboardTrust() {
           </CardHeader>
           <CardContent className="grid gap-4 sm:grid-cols-2">
             <div className="sm:col-span-2">
-              <Label htmlFor="name">Trust name (English)</Label>
+              <RequiredLabel htmlFor="name">Trust name (English)</RequiredLabel>
               <Input
                 id="name"
                 value={form.name}
@@ -110,7 +112,7 @@ export default function OnboardTrust() {
               />
             </div>
             <div className="sm:col-span-2">
-              <Label htmlFor="slug">Subdomain slug</Label>
+              <RequiredLabel htmlFor="slug">Subdomain slug</RequiredLabel>
               <Input
                 id="slug"
                 value={form.slug}
@@ -123,23 +125,23 @@ export default function OnboardTrust() {
               </p>
             </div>
             <div className="sm:col-span-2">
-              <Label htmlFor="name_hindi">Trust name (Hindi)</Label>
+              <RequiredLabel htmlFor="name_hindi">Trust name (Hindi)</RequiredLabel>
               <Input id="name_hindi" value={form.name_hindi} onChange={(e) => set('name_hindi', e.target.value)} required />
             </div>
             <div className="sm:col-span-2">
-              <Label htmlFor="address">Address</Label>
+              <RequiredLabel htmlFor="address">Address</RequiredLabel>
               <Input id="address" value={form.address} onChange={(e) => set('address', e.target.value)} required />
             </div>
             <div>
-              <Label htmlFor="phone">Phone (10 digits)</Label>
+              <RequiredLabel htmlFor="phone">Phone (10 digits)</RequiredLabel>
               <Input id="phone" value={form.phone} onChange={(e) => set('phone', e.target.value)} maxLength={10} required />
             </div>
             <div>
-              <Label htmlFor="email">Email (optional)</Label>
+              <RequiredLabel optional htmlFor="email">Email</RequiredLabel>
               <Input id="email" type="email" value={form.email} onChange={(e) => set('email', e.target.value)} />
             </div>
             <div>
-              <Label htmlFor="receipt_prefix">Receipt prefix</Label>
+              <RequiredLabel htmlFor="receipt_prefix">Receipt prefix</RequiredLabel>
               <Input
                 id="receipt_prefix"
                 value={form.receipt_prefix}
@@ -150,7 +152,7 @@ export default function OnboardTrust() {
               />
             </div>
             <div>
-              <Label htmlFor="current_fy">Financial year</Label>
+              <RequiredLabel htmlFor="current_fy">Financial year</RequiredLabel>
               <Input id="current_fy" value={form.current_fy} onChange={(e) => set('current_fy', e.target.value)} placeholder="2025-26" required />
             </div>
           </CardContent>
@@ -163,11 +165,11 @@ export default function OnboardTrust() {
           </CardHeader>
           <CardContent className="grid gap-4 sm:grid-cols-2">
             <div className="sm:col-span-2">
-              <Label htmlFor="admin_name">Full name</Label>
+              <RequiredLabel htmlFor="admin_name">Full name</RequiredLabel>
               <Input id="admin_name" value={form.admin_name} onChange={(e) => set('admin_name', e.target.value)} required />
             </div>
             <div>
-              <Label htmlFor="admin_username">Username</Label>
+              <RequiredLabel htmlFor="admin_username">Username</RequiredLabel>
               <Input
                 id="admin_username"
                 value={form.admin_username}
@@ -178,7 +180,7 @@ export default function OnboardTrust() {
             </div>
             <div />
             <div>
-              <Label htmlFor="admin_password">Password</Label>
+              <RequiredLabel htmlFor="admin_password">Password</RequiredLabel>
               <Input
                 id="admin_password"
                 type="password"
@@ -189,7 +191,7 @@ export default function OnboardTrust() {
               <p className="mt-1 text-xs text-muted-foreground">Min 8 chars, 1 uppercase, 1 number</p>
             </div>
             <div>
-              <Label htmlFor="admin_password_confirm">Confirm password</Label>
+              <RequiredLabel htmlFor="admin_password_confirm">Confirm password</RequiredLabel>
               <Input
                 id="admin_password_confirm"
                 type="password"

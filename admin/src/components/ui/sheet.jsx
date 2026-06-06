@@ -16,6 +16,7 @@ const SheetContent = React.forwardRef(({ className, children, side = 'left', ...
         'fixed z-50 gap-4 overflow-y-auto bg-background p-6 shadow-lg transition ease-in-out',
         side === 'left' && 'inset-y-0 left-0 h-full w-[280px] border-r',
         side === 'right' && 'inset-y-0 right-0 h-full w-full max-w-lg border-l sm:max-w-xl',
+        side === 'bottom' && 'inset-x-0 bottom-0 max-h-[85dvh] rounded-t-xl border-t pb-[env(safe-area-inset-bottom)]',
         className
       )}
       {...props}

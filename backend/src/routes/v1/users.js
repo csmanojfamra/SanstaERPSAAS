@@ -9,7 +9,7 @@ const {
 } = require('../../utils/validators')
 const { createAuditLog } = require('../../services/audit.service')
 const { getAuditContext } = require('../../utils/auditContext')
-const { buildTenantLoginUrl } = require('../../utils/tenantHost')
+const { buildTrustLoginUrl } = require('../../utils/tenantHost')
 
 function userSummary(user) {
   return {
@@ -48,7 +48,7 @@ router.get('/', async (req, res, next) => {
         is_platform_admin: Boolean(u.is_platform_admin),
         is_self: u.id === req.user.id,
       })),
-      login_url: buildTenantLoginUrl(req.trust.slug),
+      login_url: buildTrustLoginUrl(req.trust),
       slug: req.trust.slug,
     })
   } catch (err) {

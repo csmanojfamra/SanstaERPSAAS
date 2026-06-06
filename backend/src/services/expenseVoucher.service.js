@@ -40,6 +40,15 @@ const NATURE_LABELS = {
   OTHER: 'Other',
 }
 
+function formatExpenseParticulars(expense) {
+  const desc = String(expense?.description || '').trim()
+  if (desc) return desc
+  const cat = CATEGORY_LABELS[expense?.category] || expense?.category || ''
+  const payee = String(expense?.paid_to || '').trim()
+  if (cat && payee) return `${cat} — ${payee}`
+  return payee || cat || '—'
+}
+
 function hasDevanagari(text) {
   return DEVANAGARI_RE.test(String(text || ''))
 }
@@ -160,7 +169,7 @@ function generateExpenseVoucherPdf({ trust, expense, preparedBy }) {
 
       doc.moveDown(0.5)
       doc.font('Helvetica-Bold').fontSize(10.5).text('Description', left, doc.y, { width })
-      doc.font('Helvetica').fontSize(10).text(expense.description || '-', left, doc.y, { width, lineGap: 1 })
+      doc.font('Helvetica').fontSize(10).text(formatExpenseParticulars(expense), left, doc.y, { width, lineGap: 1 })
       if (expense.notes) {
         doc.moveDown(0.35)
         doc.font('Helvetica-Bold').fontSize(10.5).text('Additional Notes', left, doc.y, { width })

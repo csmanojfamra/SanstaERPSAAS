@@ -97,14 +97,29 @@ Without this, uploads are lost when the container restarts.
 
 ## Step 6 — Domain & SSL
 
-1. Coolify → **Domains** → add e.g. `erp.fastlegal.in`.
-2. DNS at your registrar:
+1. Coolify → your app → **Domains** → add **every hostname** that should serve the app, for example:
+   - `sansthaerp.fastlegal.in` (platform default)
+   - `manage.sanwaliyasethdeoli.in` (Sanwaliya trust white-label admin)
+2. DNS at each registrar:
 
 ```
-CNAME  erp  →  [coolify-server-hostname]
+CNAME  manage  →  [coolify-server-hostname]
 ```
 
-Coolify provisions HTTPS (Let's Encrypt) automatically.
+Or CNAME to `sansthaerp.fastlegal.in` **only if** that record already points at Coolify — you must still add the custom hostname in Coolify (DNS alone causes **404 page not found**).
+
+Coolify provisions HTTPS (Let's Encrypt) per domain automatically after DNS propagates.
+
+The Sanwaliya trust `custom_domain` is set via migration `20260606120000_sanwaliya_custom_domain` (runs on deploy).
+
+### Sanwaliya client domain checklist
+
+| Step | Action |
+|------|--------|
+| DNS | `CNAME manage.sanwaliyasethdeoli.in` → Coolify server |
+| Coolify | Add domain `manage.sanwaliyasethdeoli.in` on the ERP app |
+| Deploy | `prisma migrate deploy` sets `custom_domain` in database |
+| Verify | `https://manage.sanwaliyasethdeoli.in/admin/login` shows trust-branded login |
 
 ---
 
@@ -127,7 +142,8 @@ Click **Deploy**. First build takes ~3–5 minutes (npm install + admin build).
 | Role | URL |
 |------|-----|
 | Platform admin | `/admin/login` |
-| Sanwaliya trust | `/admin/login?tenant=sanwaliya-seth-deoli` |
+| Sanwaliya trust (default URL) | `/admin/login?tenant=sanwaliya-seth-deoli` |
+| Sanwaliya trust (custom domain) | `https://manage.sanwaliyasethdeoli.in/admin/login` |
 | Demo trust | `/admin/login?tenant=demo-temple-trust` |
 
 Change default passwords immediately in production.
@@ -150,6 +166,8 @@ On [sanstha.fastlegal.in](https://sanstha.fastlegal.in), point buttons to:
 | Build fails on Prisma | Ensure `DIRECT_URL` is set; check Supabase IP allowlist (disable restrict if needed) |
 | `P1001` can't reach database | Use pooled URL for `DATABASE_URL`, direct for `DIRECT_URL` |
 | Admin 404 | Check build logs — `npm run admin:build` must succeed |
+| Custom domain 404 | Add hostname in Coolify **Domains** (CNAME alone is not enough) |
+| Custom domain login not branded | Confirm migration ran; `custom_domain` on trust in DB |
 | Login works but PDFs missing after redeploy | Add volume on `/app/backend/uploads` |
 | CORS errors from landing site | Set `APP_URL` and `ADMIN_URL` to your ERP domain |
 

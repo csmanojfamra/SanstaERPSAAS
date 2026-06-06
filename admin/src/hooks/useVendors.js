@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import api from '@/lib/api'
 
-export function useVendors(search = '') {
+export function useVendors(search = '', options = {}) {
   return useQuery({
     queryKey: ['vendors', search],
     queryFn: async () => {
@@ -10,6 +10,7 @@ export function useVendors(search = '') {
       })
       return data.vendors || []
     },
+    enabled: options.enabled !== false,
   })
 }
 

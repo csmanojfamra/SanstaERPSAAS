@@ -418,6 +418,35 @@ router.post('/', upload.single('attachment'), async (req, res, next) => {
     }
     const data = validate(expenseSchema, body)
     const payment_channel = mapPaymentChannel(data.payment_mode, data.payment_channel)
+    data.description = String(data.description || '').trim()
+
+    if (req.body.confirm_duplicate !== 'true') {
+      const dayStart = new Date(data.expense_date)
+      dayStart.setHours(0, 0, 0, 0)
+      const dayEnd = new Date(dayStart)
+      dayEnd.setDate(dayEnd.getDate() + 1)
+      const recentCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000)
+      const paidTo = String(data.paid_to || '').trim() || null
+
+      const duplicate = await prisma.expense.findFirst({
+        where: {
+          trust_id: req.trustId,
+          amount: data.amount,
+          expense_date: { gte: dayStart, lt: dayEnd },
+          ...(paidTo ? { paid_to: paidTo } : {}),
+          created_at: { gte: recentCutoff },
+        },
+        select: { id: true, voucher_number: true },
+      })
+
+      if (duplicate) {
+        return res.status(409).json({
+          success: false,
+          code: 'DUPLICATE_VOUCHER',
+          message: `Similar voucher ${duplicate.voucher_number || ''} (₹${data.amount.toLocaleString('en-IN')}) was recorded in the last 24 hours. Continue anyway?`,
+        })
+      }
+    }
 
     const trust = await prisma.trust.findFirst({
       where: { id: req.trustId, is_active: true },

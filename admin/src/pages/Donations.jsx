@@ -23,6 +23,7 @@ import {
   Building2,
 } from 'lucide-react'
 import PageHeader from '@/components/layout/PageHeader'
+import HeaderIconButton from '@/components/layout/HeaderIconButton'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -34,6 +35,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import ConfirmActionDialog from '@/components/common/ConfirmActionDialog'
+import RequiredLabel from '@/components/common/RequiredLabel'
+import FormDialogFooter from '@/components/common/FormDialogFooter'
 import EmptyState from '@/components/common/EmptyState'
 import PaginationBar from '@/components/common/PaginationBar'
 import TableLoadingSkeleton from '@/components/common/TableLoadingSkeleton'
@@ -50,6 +53,7 @@ import {
 } from '@/hooks/useDonations'
 import { formatCurrency, formatDate, formatPaymentMode, todayISO } from '@/utils/formatters'
 import { getApiErrorMessage } from '@/lib/api'
+import { confirmBackdatedEntry, parseAmount } from '@/lib/formHelpers'
 import { toast } from '@/hooks/use-toast'
 import { useAuthStore } from '@/store/useAuthStore'
 
@@ -156,16 +160,16 @@ function ReceiptStatusCompact({ statuses = [] }) {
 
 function KpiCard({ title, value, sub, icon: Icon }) {
   return (
-    <Card className="border-border/80">
-      <CardContent className="p-3">
-        <div className="flex items-start justify-between gap-2">
+    <Card className="border-border/80 h-full">
+      <CardContent className="p-2.5 sm:p-3">
+        <div className="flex items-start justify-between gap-1.5">
           <div className="min-w-0">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{title}</p>
-            <p className="mt-1 text-xl font-semibold leading-tight">{value}</p>
-            {sub ? <p className="mt-0.5 text-[11px] text-muted-foreground">{sub}</p> : null}
+            <p className="text-xs font-medium leading-snug text-muted-foreground sm:text-[11px] sm:uppercase sm:tracking-wide">{title}</p>
+            <p className="mt-0.5 text-xl font-semibold tabular-nums leading-tight sm:mt-1 sm:text-xl">{value}</p>
+            {sub ? <p className="mt-0.5 text-[10px] text-muted-foreground line-clamp-1 sm:text-[11px]">{sub}</p> : null}
           </div>
-          <span className="rounded-md bg-muted p-1.5">
-            <Icon className="h-3.5 w-3.5 text-saffron-dark" />
+          <span className="shrink-0 rounded-md bg-muted p-1 sm:p-1.5">
+            <Icon className="h-3 w-3 text-saffron-dark sm:h-3.5 sm:w-3.5" />
           </span>
         </div>
       </CardContent>
@@ -277,11 +281,34 @@ export default function Donations() {
   }
 
   const saveEdit = async () => {
+    const name = String(editForm.donor_name || '').trim()
+    if (name.length < 2) {
+      toast({ title: 'Invalid name', description: 'Donor name must be at least 2 characters', variant: 'destructive' })
+      return
+    }
+    if (!/^[6-9]\d{9}$/.test(String(editForm.donor_mobile || ''))) {
+      toast({ title: 'Invalid mobile', description: 'Enter a valid 10-digit mobile number', variant: 'destructive' })
+      return
+    }
+    const amount = parseAmount(editForm.amount)
+    if (!amount || amount <= 0) {
+      toast({ title: 'Invalid amount', description: 'Enter a valid amount greater than 0', variant: 'destructive' })
+      return
+    }
+    if (!String(editForm.purpose || '').trim()) {
+      toast({ title: 'Purpose required', description: 'Enter a donation purpose', variant: 'destructive' })
+      return
+    }
+    if (editForm.pan_number && !/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(editForm.pan_number)) {
+      toast({ title: 'Invalid PAN', description: 'Enter a valid PAN (e.g. ABCDE1234F)', variant: 'destructive' })
+      return
+    }
+    if (!confirmBackdatedEntry(editForm.donation_date, 'donation')) return
     try {
       await updateMutation.mutateAsync({
         id: editDonation.id,
         ...editForm,
-        amount: parseFloat(editForm.amount),
+        amount,
       })
       toast({ title: 'Donation updated' })
       setEditDonation(null)
@@ -364,7 +391,9 @@ export default function Donations() {
     <>
       <PageHeader
         title="Donation Register"
+        mobileTitle="Donations"
         description="Receipt management, donor tracking and collection governance for the trust."
+        mobileAction={<HeaderIconButton icon={Plus} label="Record donation" to="/donations/new" />}
       >
         <Button asChild>
           <Link to="/donations/new">
@@ -374,7 +403,7 @@ export default function Donations() {
         </Button>
       </PageHeader>
 
-      <div className="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+      <div className="mb-4 grid grid-cols-2 gap-2 xl:grid-cols-6">
         <KpiCard
           title="Today's Collection"
           value={formatCurrency(kpis?.today?.amount)}
@@ -451,8 +480,8 @@ export default function Donations() {
         </Card>
       ) : null}
 
-      <Card className="mb-4">
-        <CardHeader className="pb-2">
+      <Card className="mb-4 border-border/70 sm:border-border">
+        <CardHeader className="pb-2 sm:pb-2">
           <div className="flex items-center justify-between gap-2">
             <CardTitle className="text-sm font-semibold">Register Filters</CardTitle>
             <Button
@@ -491,7 +520,7 @@ export default function Donations() {
             </Button>
           </form>
 
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch]">
             {Object.entries(shortcuts).map(([key, s]) => (
               <Button key={key} type="button" variant="outline" size="sm" onClick={() => applyShortcut(key)}>
                 {s.label}
@@ -614,9 +643,9 @@ export default function Donations() {
         </CardContent>
       </Card>
 
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+      <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         {data?.summary ? (
-          <p className="text-sm text-muted-foreground">
+          <p className="min-w-0 text-sm text-muted-foreground">
             Filtered register: {formatCurrency(data.summary.totalAmount)} · {data.summary.totalCount} receipts · Avg{' '}
             {formatCurrency(data.summary.averageAmount)}
           </p>
@@ -625,7 +654,7 @@ export default function Donations() {
         )}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm" className="gap-1">
+            <Button variant="outline" size="sm" className="w-full gap-1 sm:w-auto">
               <Download className="h-4 w-4" />
               Export
               <ChevronDown className="h-4 w-4" />
@@ -798,19 +827,19 @@ export default function Donations() {
           </DialogHeader>
           <div className="grid gap-3">
             <div>
-              <Label>Donor name</Label>
+              <RequiredLabel>Donor name</RequiredLabel>
               <Input value={editForm.donor_name} onChange={(e) => setEditForm({ ...editForm, donor_name: e.target.value })} />
             </div>
             <div>
-              <Label>Mobile</Label>
-              <Input value={editForm.donor_mobile} onChange={(e) => setEditForm({ ...editForm, donor_mobile: e.target.value })} />
+              <RequiredLabel>Mobile</RequiredLabel>
+              <Input value={editForm.donor_mobile} maxLength={10} onChange={(e) => setEditForm({ ...editForm, donor_mobile: e.target.value })} />
             </div>
             <div>
-              <Label>City</Label>
+              <RequiredLabel optional>City</RequiredLabel>
               <Input value={editForm.donor_city} onChange={(e) => setEditForm({ ...editForm, donor_city: e.target.value })} />
             </div>
             <div>
-              <Label>Amount</Label>
+              <RequiredLabel>Amount</RequiredLabel>
               <Input
                 type="number"
                 min={0.01}
@@ -821,11 +850,11 @@ export default function Donations() {
               />
             </div>
             <div>
-              <Label>Purpose</Label>
+              <RequiredLabel>Purpose</RequiredLabel>
               <Input value={editForm.purpose} onChange={(e) => setEditForm({ ...editForm, purpose: e.target.value })} />
             </div>
             <div>
-              <Label>Date</Label>
+              <RequiredLabel>Date</RequiredLabel>
               <Input
                 type="date"
                 max={todayISO()}
@@ -834,12 +863,15 @@ export default function Donations() {
               />
             </div>
             <div>
-              <Label>PAN (optional)</Label>
-              <Input value={editForm.pan_number} onChange={(e) => setEditForm({ ...editForm, pan_number: e.target.value })} />
+              <RequiredLabel optional>PAN</RequiredLabel>
+              <Input value={editForm.pan_number} onChange={(e) => setEditForm({ ...editForm, pan_number: e.target.value.toUpperCase() })} />
             </div>
-            <Button onClick={saveEdit} disabled={updateMutation.isPending}>
-              Save changes
-            </Button>
+            <FormDialogFooter>
+              <Button variant="outline" onClick={() => setEditDonation(null)}>Cancel</Button>
+              <Button onClick={saveEdit} disabled={updateMutation.isPending}>
+                {updateMutation.isPending ? 'Saving…' : 'Save changes'}
+              </Button>
+            </FormDialogFooter>
           </div>
         </DialogContent>
       </Dialog>

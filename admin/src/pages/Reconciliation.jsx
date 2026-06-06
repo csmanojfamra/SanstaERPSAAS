@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import PageHeader from '@/components/layout/PageHeader'
+import FilterToolbar from '@/components/common/FilterToolbar'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -165,10 +166,11 @@ export default function Reconciliation() {
     <>
       <PageHeader
         title="Bank Reconciliation Register"
+        mobileTitle="Reconciliation"
         description="Track unmatched receipts and payments pending bank verification and settlement."
       />
 
-      <div className="mb-3 grid gap-2 lg:grid-cols-4">
+      <FilterToolbar>
         <Select value={period} onValueChange={setPeriod}>
           <SelectTrigger className="h-9"><SelectValue placeholder="Select period" /></SelectTrigger>
           <SelectContent>
@@ -179,11 +181,11 @@ export default function Reconciliation() {
           </SelectContent>
         </Select>
         {period === 'CUSTOM' ? (
-          <Input className="h-9" type="date" value={fromDate} max={toDate || todayISO()} onChange={(e) => setFromDate(e.target.value)} />
-        ) : <div />}
-        {period === 'CUSTOM' ? (
-          <Input className="h-9" type="date" value={toDate} min={fromDate || undefined} max={todayISO()} onChange={(e) => setToDate(e.target.value)} />
-        ) : <div />}
+          <>
+            <Input className="h-9" type="date" value={fromDate} max={toDate || todayISO()} onChange={(e) => setFromDate(e.target.value)} aria-label="Date from" />
+            <Input className="h-9" type="date" value={toDate} min={fromDate || undefined} max={todayISO()} onChange={(e) => setToDate(e.target.value)} aria-label="Date to" />
+          </>
+        ) : null}
         <Select value={bankAccount} onValueChange={setBankAccount}>
           <SelectTrigger className="h-9"><SelectValue placeholder="Select Bank Account" /></SelectTrigger>
           <SelectContent>
@@ -192,12 +194,12 @@ export default function Reconciliation() {
             ))}
           </SelectContent>
         </Select>
-      </div>
+      </FilterToolbar>
 
       {isLoading ? (
         <Skeleton className="h-24 w-full mb-6" />
       ) : (
-        <div className="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="mb-4 grid grid-cols-2 gap-2 lg:grid-cols-5">
           <Card>
             <CardHeader className="pb-2"><CardTitle className="text-xs">Pending Receipts</CardTitle></CardHeader>
             <CardContent>
