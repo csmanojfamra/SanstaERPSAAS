@@ -4,7 +4,7 @@ const path = require('path')
 
 const prisma = require('../../lib/prisma')
 const { generateReceiptNumber } = require('../../services/receiptNumber.service')
-const { generateReceiptBuffer } = require('../../services/receipt.service')
+const { generateReceiptBuffer, fontsAvailable } = require('../../services/receipt.service')
 const { saveReceiptPDF, receiptExists, getReceiptFilePath } = require('../../services/storage.service')
 const { sendReceiptWhatsApp } = require('../../services/whatsapp.service')
 const {
@@ -126,7 +126,14 @@ async function generateAndUploadReceipt(donation, trust) {
   }
 }
 
-async function ensureReceiptAvailable(donation, trust) {
+async function ensureReceiptAvailable(donation, trust, { forceRegenerate = false } = {}) {
+  // Always rebuild when Hindi fonts are present so previously garbled PDFs
+  // (generated without Noto Sans Devanagari) are corrected on next print/download.
+  if (forceRegenerate || fontsAvailable) {
+    const regenerated = await generateAndUploadReceipt(donation, trust)
+    if (regenerated) return regenerated
+  }
+
   if (donation.receipt_pdf_path) {
     const fullPath = getReceiptFullPath(donation.receipt_pdf_path)
     if (fs.existsSync(fullPath)) {

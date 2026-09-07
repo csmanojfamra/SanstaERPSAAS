@@ -18,6 +18,20 @@ RUN cd admin && npm ci
 COPY backend ./backend
 COPY admin ./admin
 
+# Ensure Devanagari fonts exist for PDF receipts (required in production)
+RUN mkdir -p backend/fonts \
+  && if [ ! -f backend/fonts/NotoSansDevanagari-Regular.ttf ] || [ ! -f backend/fonts/NotoSansDevanagari-Bold.ttf ]; then \
+       apt-get update -y \
+       && apt-get install -y --no-install-recommends curl \
+       && curl -fsSL -o backend/fonts/NotoSansDevanagari-Regular.ttf \
+            "https://github.com/googlefonts/noto-fonts/raw/main/hinted/ttf/NotoSansDevanagari/NotoSansDevanagari-Regular.ttf" \
+       && curl -fsSL -o backend/fonts/NotoSansDevanagari-Bold.ttf \
+            "https://github.com/googlefonts/noto-fonts/raw/main/hinted/ttf/NotoSansDevanagari/NotoSansDevanagari-Bold.ttf" \
+       && rm -rf /var/lib/apt/lists/*; \
+     fi \
+  && test -s backend/fonts/NotoSansDevanagari-Regular.ttf \
+  && test -s backend/fonts/NotoSansDevanagari-Bold.ttf
+
 RUN npm run admin:build
 RUN npx prisma generate --schema=backend/prisma/schema.prisma
 

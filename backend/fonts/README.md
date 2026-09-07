@@ -1,15 +1,20 @@
-# Hindi fonts for PDF receipts
+# Hindi fonts for PDF receipts (donation + expense vouchers)
 
-Download these files into this folder:
+Required files in this folder:
 
-- [NotoSansDevanagari-Regular.ttf](https://github.com/googlefonts/noto-fonts/raw/main/hinted/ttf/NotoSansDevanagari/NotoSansDevanagari-Regular.ttf)
-- [NotoSansDevanagari-Bold.ttf](https://github.com/googlefonts/noto-fonts/raw/main/hinted/ttf/NotoSansDevanagari/NotoSansDevanagari-Bold.ttf)
+- NotoSansDevanagari-Regular.ttf
+- NotoSansDevanagari-Bold.ttf
 
-Without these fonts, receipts fall back to Helvetica (Hindi may not render correctly).
+These fonts **must ship in the Docker image**. Without them, PDFKit falls back to Helvetica and Devanagari becomes garbled (mojibake).
+
+Download (if missing locally):
 
 ```bash
+cd backend/fonts
 curl -L -o NotoSansDevanagari-Regular.ttf \
   "https://github.com/googlefonts/noto-fonts/raw/main/hinted/ttf/NotoSansDevanagari/NotoSansDevanagari-Regular.ttf"
 curl -L -o NotoSansDevanagari-Bold.ttf \
   "https://github.com/googlefonts/noto-fonts/raw/main/hinted/ttf/NotoSansDevanagari/NotoSansDevanagari-Bold.ttf"
 ```
+
+The production Dockerfile also downloads these automatically when they are absent at build time.

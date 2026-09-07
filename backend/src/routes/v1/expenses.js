@@ -280,55 +280,99 @@ router.get('/', async (req, res, next) => {
     const selectedPeriod = buildExpensePeriodRange(req.query)
     const fyAnchorDate = selectedPeriod?.dateTo || selectedPeriod?.dateFrom || new Date()
     const hasCategoryFilter = !!req.query.category
+    if (hasCategoryFilter && !CATEGORY_LABELS[req.query.category]) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid expense category',
+        code: 'VALIDATION_ERROR',
+      })
+    }
 
     const monthStart = new Date()
     monthStart.setDate(1)
     monthStart.setHours(0, 0, 0, 0)
-    const [total, expenses, aggregate, byCategoryRaw, channelSplit, verifiedCount, attachmentCount, highValueCount, verifiedAmountAgg] = await prisma.$transaction([
-      prisma.expense.count({ where }),
-      prisma.expense.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: [{ expense_date: 'desc' }, { created_at: 'desc' }],
-        include: {
-          created_by_user: {
-            select: { name: true, username: true },
-          },
-          reconciliation_logs: {
-            orderBy: { created_at: 'desc' },
-            take: 1,
-            include: {
-              reconciled_user: {
-                select: { name: true, username: true },
+
+    // Interactive transaction — do not mix Promise.resolve() into array $transaction
+    // (that caused HTTP 500 when a category filter was applied).
+    const {
+      total,
+      expenses,
+      aggregate,
+      byCategoryRaw,
+      channelSplit,
+      verifiedCount,
+      attachmentCount,
+      highValueCount,
+      verifiedAmountAgg,
+    } = await prisma.$transaction(async (tx) => {
+      const [
+        totalCount,
+        expenseRows,
+        amountAggregate,
+        categoryRows,
+        channelRows,
+        verified,
+        attached,
+        highValue,
+        verifiedAmount,
+      ] = await Promise.all([
+        tx.expense.count({ where }),
+        tx.expense.findMany({
+          where,
+          skip,
+          take: limit,
+          orderBy: [{ expense_date: 'desc' }, { created_at: 'desc' }],
+          include: {
+            created_by_user: {
+              select: { name: true, username: true },
+            },
+            reconciliation_logs: {
+              orderBy: { created_at: 'desc' },
+              take: 1,
+              include: {
+                reconciled_user: {
+                  select: { name: true, username: true },
+                },
               },
             },
           },
-        },
-      }),
-      prisma.expense.aggregate({
-        where,
-        _sum: { amount: true },
-        _count: { id: true },
-      }),
-      hasCategoryFilter
-        ? Promise.resolve([])
-        : prisma.expense.groupBy({
-            by: ['category'],
-            where,
-            _sum: { amount: true },
-            _count: { id: true },
-          }),
-      prisma.expense.groupBy({
-        by: ['payment_channel'],
-        where,
-        _sum: { amount: true },
-      }),
-      prisma.expense.count({ where: { ...where, is_reconciled: true } }),
-      prisma.expense.count({ where: { ...where, attachment_url: { not: null } } }),
-      prisma.expense.count({ where: { AND: [where, { amount: { gte: HIGH_VALUE_THRESHOLD } }] } }),
-      prisma.expense.aggregate({ where: { ...where, is_reconciled: true }, _sum: { amount: true } }),
-    ])
+        }),
+        tx.expense.aggregate({
+          where,
+          _sum: { amount: true },
+          _count: { id: true },
+        }),
+        hasCategoryFilter
+          ? Promise.resolve([])
+          : tx.expense.groupBy({
+              by: ['category'],
+              where,
+              _sum: { amount: true },
+              _count: { id: true },
+            }),
+        tx.expense.groupBy({
+          by: ['payment_channel'],
+          where,
+          _sum: { amount: true },
+        }),
+        tx.expense.count({ where: { ...where, is_reconciled: true } }),
+        tx.expense.count({ where: { ...where, attachment_url: { not: null } } }),
+        tx.expense.count({ where: { AND: [where, { amount: { gte: HIGH_VALUE_THRESHOLD } }] } }),
+        tx.expense.aggregate({ where: { ...where, is_reconciled: true }, _sum: { amount: true } }),
+      ])
+
+      return {
+        total: totalCount,
+        expenses: expenseRows,
+        aggregate: amountAggregate,
+        byCategoryRaw: categoryRows,
+        channelSplit: channelRows,
+        verifiedCount: verified,
+        attachmentCount: attached,
+        highValueCount: highValue,
+        verifiedAmountAgg: verifiedAmount,
+      }
+    })
 
     const by_category = byCategoryRaw
       .map((row) => ({

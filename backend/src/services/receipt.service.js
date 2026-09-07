@@ -10,6 +10,12 @@ const FONT_BOLD = path.join(FONT_DIR, 'NotoSansDevanagari-Bold.ttf')
 
 const FONTS_AVAILABLE = fs.existsSync(FONT_REGULAR) && fs.existsSync(FONT_BOLD)
 
+if (!FONTS_AVAILABLE) {
+  console.warn(
+    '[receipt] Hindi fonts missing in backend/fonts — Devanagari will render incorrectly. Add NotoSansDevanagari Regular/Bold TTFs.',
+  )
+}
+
 const COLORS = {
   saffron: '#FF6B00',
   maroon: '#7B1C1C',
@@ -292,7 +298,11 @@ async function generateReceiptBuffer(donation, trust) {
       y += 40
 
       doc.rect(innerX, y, innerW, 44).fill(secondary)
-      textHindi(doc, '॥ श्री सांवलिया सेठ जी की जय ॥', innerX, y + 8, {
+      const blessing =
+        trust.name_hindi && String(trust.name_hindi).trim()
+          ? `॥ ${String(trust.name_hindi).trim()} ॥`
+          : '॥ जय श्री कृष्ण ॥'
+      textHindi(doc, blessing, innerX, y + 8, {
         align: 'center',
         width: innerW,
         size: 10,
@@ -319,4 +329,4 @@ async function generateReceiptBuffer(donation, trust) {
   })
 }
 
-module.exports = { generateReceiptBuffer }
+module.exports = { generateReceiptBuffer, fontsAvailable: FONTS_AVAILABLE }
