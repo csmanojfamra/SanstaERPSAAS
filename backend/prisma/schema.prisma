@@ -47,6 +47,11 @@ model Trust {
   audit_logs          AuditLog[]
   notifications       Notification[]
   reconciliation_logs ReconciliationLog[]
+  stock_items         StockItem[]
+  inkind_receipts     InKindReceipt[]
+  stock_movements     StockMovement[]
+  commitment_plans    CommitmentPlan[]
+  commitment_members  CommitmentMember[]
 }
 
 model User {
@@ -124,6 +129,7 @@ model Donation {
   updated_at     DateTime    @updatedAt
 
   reconciliation_logs ReconciliationLog[]
+  commitment_installments CommitmentInstallment[]
 
   @@unique([trust_id, receipt_number])
 }
@@ -324,5 +330,144 @@ model ReconciliationLog {
 
   @@index([trust_id])
   @@index([created_at])
+}
+
+enum StockMovementType {
+  IN
+  UTILISE
+}
+
+enum CommitmentStatus {
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+model StockItem {
+  id         String   @id @default(cuid())
+  trust_id   String
+  trust      Trust    @relation(fields: [trust_id], references: [id])
+  name       String
+  unit       String   @default("pcs")
+  category   String?
+  notes      String?
+  is_active  Boolean  @default(true)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  receipt_lines InKindReceiptLine[]
+  movements     StockMovement[]
+
+  @@unique([trust_id, name])
+  @@index([trust_id, is_active])
+}
+
+model InKindReceipt {
+  id               String   @id @default(cuid())
+  trust_id         String
+  trust            Trust    @relation(fields: [trust_id], references: [id])
+  receipt_number   String
+  donor_name       String
+  donor_mobile     String?
+  donor_city       String?
+  receipt_date     DateTime @db.Date
+  notes            String?
+  estimated_value  Decimal? @db.Decimal(12, 2)
+  is_deleted       Boolean  @default(false)
+  created_by       String?
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+
+  lines     InKindReceiptLine[]
+  movements StockMovement[]
+
+  @@unique([trust_id, receipt_number])
+  @@index([trust_id, receipt_date])
+}
+
+model InKindReceiptLine {
+  id              String       @id @default(cuid())
+  receipt_id      String
+  receipt         InKindReceipt @relation(fields: [receipt_id], references: [id], onDelete: Cascade)
+  stock_item_id   String
+  stock_item      StockItem    @relation(fields: [stock_item_id], references: [id])
+  quantity        Decimal      @db.Decimal(12, 3)
+  description     String?
+  estimated_value Decimal?     @db.Decimal(12, 2)
+
+  @@index([receipt_id])
+  @@index([stock_item_id])
+}
+
+model StockMovement {
+  id                String            @id @default(cuid())
+  trust_id          String
+  trust             Trust             @relation(fields: [trust_id], references: [id])
+  stock_item_id     String
+  stock_item        StockItem         @relation(fields: [stock_item_id], references: [id])
+  movement_type     StockMovementType
+  quantity          Decimal           @db.Decimal(12, 3)
+  movement_date     DateTime          @db.Date
+  reason            String?
+  inkind_receipt_id String?
+  inkind_receipt    InKindReceipt?    @relation(fields: [inkind_receipt_id], references: [id])
+  created_by        String?
+  created_at        DateTime          @default(now())
+
+  @@index([trust_id, stock_item_id])
+  @@index([trust_id, movement_date])
+}
+
+model CommitmentPlan {
+  id            String   @id @default(cuid())
+  trust_id      String
+  trust         Trust    @relation(fields: [trust_id], references: [id])
+  code          String
+  title         String
+  total_amount  Decimal  @db.Decimal(12, 2)
+  tenure_months Int
+  is_active     Boolean  @default(true)
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  members CommitmentMember[]
+
+  @@unique([trust_id, code])
+  @@index([trust_id, is_active])
+}
+
+model CommitmentMember {
+  id         String           @id @default(cuid())
+  trust_id   String
+  trust      Trust            @relation(fields: [trust_id], references: [id])
+  plan_id    String
+  plan       CommitmentPlan   @relation(fields: [plan_id], references: [id])
+  name       String
+  mobile     String
+  city       String?
+  start_date DateTime         @db.Date
+  status     CommitmentStatus @default(ACTIVE)
+  notes      String?
+  created_at DateTime         @default(now())
+  updated_at DateTime         @updatedAt
+
+  installments CommitmentInstallment[]
+
+  @@index([trust_id, status])
+  @@index([trust_id, mobile])
+}
+
+model CommitmentInstallment {
+  id           String            @id @default(cuid())
+  member_id    String
+  member       CommitmentMember  @relation(fields: [member_id], references: [id], onDelete: Cascade)
+  amount       Decimal           @db.Decimal(12, 2)
+  payment_date DateTime          @db.Date
+  donation_id  String?           @unique
+  donation     Donation?         @relation(fields: [donation_id], references: [id])
+  notes        String?
+  created_at   DateTime          @default(now())
+
+  @@index([member_id, payment_date])
 }
 

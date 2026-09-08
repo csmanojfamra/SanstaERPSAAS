@@ -679,7 +679,7 @@ router.get('/financial-summary', async (req, res, next) => {
 router.get('/export-excel', async (req, res, next) => {
   try {
     const type = req.query.type || 'donations'
-    const validTypes = ['donations', 'expenses', 'trustees', 'donors', 'full']
+    const validTypes = ['donations', 'expenses', 'trustees', 'donors', 'full', 'inkind_stock', 'inkind_receipts', 'inkind_utilise', 'membership']
     if (!validTypes.includes(type)) {
       return res.status(400).json({
         success: false,
@@ -934,6 +934,135 @@ router.get('/export-excel', async (req, res, next) => {
           `${rows.length} donors`,
         ])
         ws.getColumn(4).numFmt = '₹#,##0.00'
+      }
+
+      if (sheetType === 'inkind_stock') {
+        const items = await prisma.stockItem.findMany({
+          where: { trust_id: req.trustId, is_active: true },
+          orderBy: { name: 'asc' },
+        })
+        const movements = await prisma.stockMovement.groupBy({
+          by: ['stock_item_id', 'movement_type'],
+          where: { trust_id: req.trustId },
+          _sum: { quantity: true },
+        })
+        const bal = {}
+        for (const row of movements) {
+          if (!bal[row.stock_item_id]) bal[row.stock_item_id] = { inbound: 0, utilised: 0 }
+          const qty = decimalToNumber(row._sum.quantity)
+          if (row.movement_type === 'IN') bal[row.stock_item_id].inbound += qty
+          if (row.movement_type === 'UTILISE') bal[row.stock_item_id].utilised += qty
+        }
+        const headers = ['Item', 'Unit', 'Category', 'Inbound', 'Utilised', 'Balance']
+        const rows = items.map((item) => {
+          const b = bal[item.id] || { inbound: 0, utilised: 0 }
+          return [item.name, item.unit, item.category || '', b.inbound, b.utilised, b.inbound - b.utilised]
+        })
+        const ws = workbook.addWorksheet('Stock On Hand')
+        addStyledDataSheet(ws, trustName, metaBase, headers, rows, null)
+      }
+
+      if (sheetType === 'inkind_receipts') {
+        const where = { trust_id: req.trustId, is_deleted: false }
+        if (date_from && date_to) {
+          where.receipt_date = { gte: parseDateOnly(date_from), lte: endOfDay(date_to) }
+        }
+        const receipts = await prisma.inKindReceipt.findMany({
+          where,
+          orderBy: [{ receipt_date: 'desc' }],
+          include: { lines: { include: { stock_item: true } } },
+        })
+        const headers = ['Receipt No', 'Date', 'Donor', 'Mobile', 'City', 'Item', 'Qty', 'Unit', 'Est. Value', 'Notes']
+        const rows = []
+        for (const r of receipts) {
+          for (const line of r.lines) {
+            rows.push([
+              r.receipt_number,
+              r.receipt_date.toISOString().slice(0, 10),
+              r.donor_name,
+              r.donor_mobile || '',
+              r.donor_city || '',
+              line.stock_item?.name || '',
+              decimalToNumber(line.quantity),
+              line.stock_item?.unit || '',
+              line.estimated_value != null ? decimalToNumber(line.estimated_value) : '',
+              r.notes || '',
+            ])
+          }
+        }
+        const ws = workbook.addWorksheet('In-Kind Receipts')
+        addStyledDataSheet(ws, trustName, metaBase, headers, rows, null)
+      }
+
+      if (sheetType === 'inkind_utilise') {
+        const where = { trust_id: req.trustId, movement_type: 'UTILISE' }
+        if (date_from && date_to) {
+          where.movement_date = { gte: parseDateOnly(date_from), lte: endOfDay(date_to) }
+        }
+        const movements = await prisma.stockMovement.findMany({
+          where,
+          orderBy: [{ movement_date: 'desc' }, { created_at: 'desc' }],
+          include: { stock_item: { select: { name: true, unit: true, category: true } } },
+        })
+        const headers = ['Date', 'Item', 'Category', 'Qty', 'Unit', 'Reason']
+        const rows = movements.map((m) => [
+          m.movement_date.toISOString().slice(0, 10),
+          m.stock_item?.name || '',
+          m.stock_item?.category || '',
+          decimalToNumber(m.quantity),
+          m.stock_item?.unit || '',
+          m.reason || '',
+        ])
+        const ws = workbook.addWorksheet('Utilisation')
+        addStyledDataSheet(ws, trustName, metaBase, headers, rows, null)
+      }
+
+      if (sheetType === 'membership') {
+        const members = await prisma.commitmentMember.findMany({
+          where: { trust_id: req.trustId },
+          include: { plan: true, installments: { select: { amount: true, payment_date: true } } },
+          orderBy: { created_at: 'desc' },
+        })
+        const headers = [
+          'Name',
+          'Mobile',
+          'City',
+          'Status',
+          'Start',
+          'Committed',
+          'Paid',
+          'Pending',
+          '% Paid',
+          'Tenure End',
+          'Overdue',
+        ]
+        const rows = members.map((m) => {
+          const paid = m.installments.reduce((s, i) => s + decimalToNumber(i.amount), 0)
+          const committed = decimalToNumber(m.plan.total_amount)
+          const pending = Math.max(0, committed - paid)
+          const start = new Date(m.start_date)
+          const end = new Date(start)
+          end.setMonth(end.getMonth() + m.plan.tenure_months)
+          const overdue = m.status === 'ACTIVE' && pending > 0 && end < new Date()
+          return [
+            m.name,
+            m.mobile,
+            m.city || '',
+            m.status,
+            m.start_date.toISOString().slice(0, 10),
+            committed,
+            paid,
+            pending,
+            committed > 0 ? Math.round((paid / committed) * 1000) / 10 : 0,
+            end.toISOString().slice(0, 10),
+            overdue ? 'Yes' : 'No',
+          ]
+        })
+        const ws = workbook.addWorksheet('Memberships')
+        addStyledDataSheet(ws, trustName, metaBase, headers, rows, null)
+        ws.getColumn(6).numFmt = '₹#,##0.00'
+        ws.getColumn(7).numFmt = '₹#,##0.00'
+        ws.getColumn(8).numFmt = '₹#,##0.00'
       }
     }
 

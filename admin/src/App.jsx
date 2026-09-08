@@ -17,6 +17,9 @@ import Reconciliation from '@/pages/Reconciliation'
 import AuditLogs from '@/pages/AuditLogs'
 import Settings from '@/pages/Settings'
 import CashBook from '@/pages/CashBook'
+import InKindStock from '@/pages/InKindStock'
+import NewInKindReceipt from '@/pages/NewInKindReceipt'
+import Memberships from '@/pages/Memberships'
 import PlatformRoute from '@/routes/PlatformRoute'
 import PlatformLayout from '@/layouts/PlatformLayout'
 import PlatformTrusts from '@/pages/platform/Trusts'
@@ -57,6 +60,9 @@ export default function App() {
                 <Route path="dashboard" element={<Dashboard />} />
                 <Route path="donations" element={<Donations />} />
                 <Route path="donations/new" element={<NewDonation />} />
+                <Route path="inkind" element={<InKindStock />} />
+                <Route path="inkind/receipts/new" element={<NewInKindReceipt />} />
+                <Route path="memberships" element={<Memberships />} />
                 <Route path="trustees" element={<Trustees />} />
                 <Route path="expenses" element={<Expenses />} />
                 <Route path="reports" element={<Reports />} />

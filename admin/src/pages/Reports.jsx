@@ -24,6 +24,8 @@ import {
   exportPdf,
 } from '@/hooks/useReports'
 import { useReconciliation } from '@/hooks/useAnalytics'
+import { useStockReport, useStockMovements } from '@/hooks/useInKind'
+import { useCommitmentSummary } from '@/hooks/useCommitments'
 import { formatCurrency, formatPaymentMode, todayISO } from '@/utils/formatters'
 import { toast } from '@/hooks/use-toast'
 import { getApiErrorMessage } from '@/lib/api'
@@ -55,6 +57,8 @@ const REPORT_CATEGORIES = [
   'Accounting Reports',
   'Donation Reports',
   'Expense Reports',
+  'In-Kind & Stock',
+  'Membership Reports',
   'Trustee Reports',
   'Compliance Reports',
   'Audit Reports',
@@ -68,6 +72,11 @@ const REPORT_MODULES = [
   { id: 'donation_register', category: 'Donation Reports', title: 'Donation Collection Register', purpose: 'Receipt-wise and donor-wise collection report for trust accounting.', exportType: 'donations', metricKey: 'donationRange' },
   { id: 'mode_wise', category: 'Donation Reports', title: 'Mode-wise Collection Report', purpose: 'Cash/UPI/Bank/Cheque mix for control and compliance insights.', exportType: 'donations', metricKey: 'paymentMode' },
   { id: 'top_donor', category: 'Donation Reports', title: 'Top Donor Summary', purpose: 'High-value donor trend for annual planning and recognition.', exportType: 'donations', metricKey: 'financial' },
+  { id: 'stock_on_hand', category: 'In-Kind & Stock', title: 'Stock On Hand', purpose: 'Current in-kind inventory balances by item.', exportType: 'inkind_stock', metricKey: 'inkindStock' },
+  { id: 'inkind_register', category: 'In-Kind & Stock', title: 'In-Kind Receipt Register', purpose: 'Goods donation receipts (gold, clothes, materials) for the period.', exportType: 'inkind_receipts', metricKey: 'inkindReceipts' },
+  { id: 'utilisation_register', category: 'In-Kind & Stock', title: 'Utilisation Register', purpose: 'Stock consumption / utilisation entries for the period.', exportType: 'inkind_utilise', metricKey: 'inkindUtilise' },
+  { id: 'membership_collection', category: 'Membership Reports', title: 'Lifetime Membership Collection', purpose: 'Committed vs collected vs pending across lifetime members.', exportType: 'membership', metricKey: 'membership' },
+  { id: 'membership_dues', category: 'Membership Reports', title: 'Membership Pending Dues', purpose: 'Member-wise pending balance and overdue within tenure.', exportType: 'membership', metricKey: 'membership' },
   { id: 'high_value_donation', category: 'Compliance Reports', title: 'High Value Donation Report', purpose: 'Flag large donations (10k/50k/2L+) for review and control.', exportType: 'donations', metricKey: 'highValueDonation' },
   { id: 'cash_donation_threshold', category: 'Compliance Reports', title: 'Cash Donation Threshold Report', purpose: 'Cash-heavy and threshold-sensitive donations for tax readiness.', exportType: 'donations', metricKey: 'paymentMode' },
   { id: 'reconciliation_pending', category: 'Compliance Reports', title: 'Reconciliation Pending Report', purpose: 'Pending bank matching entries for settlement closure.', exportType: 'full', metricKey: 'reconciliation' },
@@ -135,6 +144,9 @@ export default function Reports() {
   const dailyExpenseSummary = useExpenseSummary(dailyDate ? { date_from: dailyDate, date_to: dailyDate } : null)
   const trusteeReport = useTrusteeContributionsReport()
   const reconciliation = useReconciliation({ period: 'MONTHLY' })
+  const stockReport = useStockReport()
+  const utiliseMovements = useStockMovements({ page: 1, limit: 1, movement_type: 'UTILISE' })
+  const membershipSummary = useCommitmentSummary()
 
   const moduleMetrics = useMemo(() => {
     const highValueDonations = (dateRangeReport.data?.donations || []).filter((d) => Number(d.amount || 0) >= 10000)
@@ -144,6 +156,11 @@ export default function Reports() {
       Number(reconciliation.data?.totals?.pending_payments_count || 0)
     const modeCount = paymentModes.data?.by_payment_mode?.length || 0
     const topDonor = financialSummary.data?.top_10_donors?.[0]
+    const stockItems = stockReport.data?.items || []
+    const stockSkus = stockItems.length
+    const stockBalanceQty = stockItems.reduce((s, i) => s + Number(i.balance || 0), 0)
+    const utilisedQty = stockItems.reduce((s, i) => s + Number(i.utilised || 0), 0)
+    const m = membershipSummary.data?.summary
 
     return {
       daily: `${formatCurrency(daily.data?.total_amount)} | ${daily.data?.total_count || 0} receipts | ${dailyExpenseSummary.data?.summary?.expense_count || 0} vouchers`,
@@ -156,8 +173,14 @@ export default function Reports() {
       highValueDonation: `${highValueDonations.length} donation(s) above Rs. 10,000`,
       highRisk: `${highRiskCount} transaction(s) flagged for review`,
       topDonor: topDonor ? `${topDonor.donor_name || 'Top donor'} - ${formatCurrency(topDonor.total_amount)}` : 'No donor concentration risk',
+      inkindStock: `${stockSkus} SKU(s) · on-hand qty ${stockBalanceQty.toLocaleString('en-IN')}`,
+      inkindReceipts: 'Open In-Kind Stock for receipt register details',
+      inkindUtilise: `${utiliseMovements.data?.pagination?.total ?? 0} utilisation(s) · qty ${utilisedQty.toLocaleString('en-IN')}`,
+      membership: m
+        ? `${m.members_total} members · collected ${formatCurrency(m.amount_collected)} · pending ${formatCurrency(m.amount_pending)}`
+        : 'No membership data yet',
     }
-  }, [daily.data, dailyExpenseSummary.data, dateRangeReport.data, expenseSummary.data, paymentModes.data, trusteeReport.data, reconciliation.data, financialSummary.data])
+  }, [daily.data, dailyExpenseSummary.data, dateRangeReport.data, expenseSummary.data, paymentModes.data, trusteeReport.data, reconciliation.data, financialSummary.data, stockReport.data, utiliseMovements.data, membershipSummary.data])
 
   const quickInsights = useMemo(() => {
     const totalDonations = Number(financialSummary.data?.total_donations_this_fy || 0)

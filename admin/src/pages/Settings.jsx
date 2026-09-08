@@ -17,6 +17,7 @@ const SETTINGS_NAV = [
   { id: 'team-users', label: 'Team & Users' },
   { id: 'financial', label: 'Financial' },
   { id: 'receipts', label: 'Receipts' },
+  { id: 'programs', label: 'In-Kind & Membership' },
   { id: 'website', label: 'Public Website' },
   { id: 'branding', label: 'Branding' },
   { id: 'security', label: 'Security' },
@@ -130,6 +131,15 @@ export default function Settings() {
     public_donor_display_settings: true,
     display_limit: trust?.top_donors_limit ?? 10,
   })
+  const [programs, setPrograms] = useState({
+    inkind_enabled: true,
+    membership_enabled: true,
+    lifetime_title: 'Lifetime Membership',
+    lifetime_amount: 110000,
+    lifetime_tenure_months: 36,
+  })
+  const [programsBaseline, setProgramsBaseline] = useState(null)
+  const [savingPrograms, setSavingPrograms] = useState(false)
   const [activeSection, setActiveSection] = useState('general')
 
   useEffect(() => {
@@ -196,6 +206,15 @@ export default function Settings() {
           public_donor_display_settings: extra?.website?.public_donor_display_settings ?? prev.public_donor_display_settings,
           display_limit: extra?.website?.display_limit ?? prev.display_limit,
         }))
+        const nextPrograms = {
+          inkind_enabled: extra?.inkind?.enabled !== false,
+          membership_enabled: extra?.membership?.enabled !== false,
+          lifetime_title: extra?.membership?.lifetime?.title || 'Lifetime Membership',
+          lifetime_amount: Number(extra?.membership?.lifetime?.amount ?? 110000),
+          lifetime_tenure_months: Number(extra?.membership?.lifetime?.tenure_months ?? 36),
+        }
+        setPrograms(nextPrograms)
+        setProgramsBaseline(nextPrograms)
         setGovernance((prev) => ({
           ...prev,
           approval_high_value_expenses: extra?.governance?.approval_high_value_expenses ?? prev.approval_high_value_expenses,
@@ -309,6 +328,41 @@ export default function Settings() {
     } catch (err) {
       toast({ title: 'Failed', description: getApiErrorMessage(err), variant: 'destructive' })
       throw err
+    }
+  }
+
+  const programsDirty =
+    programsBaseline != null &&
+    (programs.inkind_enabled !== programsBaseline.inkind_enabled ||
+      programs.membership_enabled !== programsBaseline.membership_enabled ||
+      programs.lifetime_title !== programsBaseline.lifetime_title ||
+      Number(programs.lifetime_amount) !== Number(programsBaseline.lifetime_amount) ||
+      Number(programs.lifetime_tenure_months) !== Number(programsBaseline.lifetime_tenure_months))
+
+  const savePrograms = async () => {
+    try {
+      setSavingPrograms(true)
+      await saveSettingsPayload(
+        {
+          settings_json: {
+            inkind: { enabled: Boolean(programs.inkind_enabled) },
+            membership: {
+              enabled: Boolean(programs.membership_enabled),
+              lifetime: {
+                title: programs.lifetime_title || 'Lifetime Membership',
+                amount: Number(programs.lifetime_amount) || 110000,
+                tenure_months: Number(programs.lifetime_tenure_months) || 36,
+              },
+            },
+          },
+        },
+        'In-kind & membership settings saved'
+      )
+      setProgramsBaseline({ ...programs })
+    } catch {
+      /* toast already shown */
+    } finally {
+      setSavingPrograms(false)
     }
   }
 
@@ -488,6 +542,86 @@ export default function Settings() {
                 <p className="text-xs">Receipt Prefix: {receipt.receipt_prefix || 'REC'}</p>
                 <p className="text-xs">Signatory: {receipt.authorized_signatory || 'Not configured'}</p>
                 <p className="text-xs mt-1 text-muted-foreground">{receipt.receipt_footer_note || 'Footer note will appear here.'}</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card id="programs">
+            <CardHeader>
+              <SectionHeader
+                title="In-Kind & Membership"
+                description="Enable goods stock and lifetime commitment plan defaults for this trust."
+                onSave={savePrograms}
+                onReset={() => programsBaseline && setPrograms({ ...programsBaseline })}
+                saving={savingPrograms}
+                dirty={programsDirty}
+                saveLabel="Save Program Settings"
+              />
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between rounded-md border px-3 py-2">
+                <div>
+                  <p className="text-sm font-medium">In-kind stock module</p>
+                  <p className="text-xs text-muted-foreground">Goods receipts and utilisation (not posted to Cash Book)</p>
+                </div>
+                <input
+                  type="checkbox"
+                  className="h-4 w-4"
+                  checked={programs.inkind_enabled}
+                  onChange={(e) => setPrograms({ ...programs, inkind_enabled: e.target.checked })}
+                />
+              </div>
+              <div className="flex items-center justify-between rounded-md border px-3 py-2">
+                <div>
+                  <p className="text-sm font-medium">Lifetime membership module</p>
+                  <p className="text-xs text-muted-foreground">Commitment tracking; each payment still creates a donation receipt</p>
+                </div>
+                <input
+                  type="checkbox"
+                  className="h-4 w-4"
+                  checked={programs.membership_enabled}
+                  onChange={(e) => setPrograms({ ...programs, membership_enabled: e.target.checked })}
+                />
+              </div>
+              <Separator />
+              <p className="text-xs font-medium text-muted-foreground">Lifetime plan defaults (synced to CommitmentPlan)</p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="sm:col-span-2">
+                  <Label>Plan title</Label>
+                  <Input
+                    value={programs.lifetime_title}
+                    onChange={(e) => setPrograms({ ...programs, lifetime_title: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label>Total amount (₹)</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    value={programs.lifetime_amount}
+                    onChange={(e) =>
+                      setPrograms({
+                        ...programs,
+                        lifetime_amount: e.target.value ? Number(e.target.value) : '',
+                      })
+                    }
+                  />
+                </div>
+                <div>
+                  <Label>Tenure (months)</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={120}
+                    value={programs.lifetime_tenure_months}
+                    onChange={(e) =>
+                      setPrograms({
+                        ...programs,
+                        lifetime_tenure_months: e.target.value ? Number(e.target.value) : '',
+                      })
+                    }
+                  />
+                </div>
               </div>
             </CardContent>
           </Card>

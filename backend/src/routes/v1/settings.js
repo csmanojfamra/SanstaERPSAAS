@@ -78,6 +78,17 @@ const settingsSchema = z.object({
       failed_login_attempts_month: z.number().optional(),
       active_sessions: z.number().optional(),
     }).optional(),
+    inkind: z.object({
+      enabled: z.boolean().optional(),
+    }).optional(),
+    membership: z.object({
+      enabled: z.boolean().optional(),
+      lifetime: z.object({
+        amount: z.number().positive().optional(),
+        tenure_months: z.number().int().min(1).max(120).optional(),
+        title: z.string().optional(),
+      }).optional(),
+    }).optional(),
   }).optional(),
 })
 
@@ -94,6 +105,15 @@ function mergeSettingsJson(existing = {}, incoming = {}) {
     branding: { ...(current.branding || {}), ...(next.branding || {}) },
     governance: { ...(current.governance || {}), ...(next.governance || {}) },
     security: { ...(current.security || {}), ...(next.security || {}) },
+    inkind: { ...(current.inkind || {}), ...(next.inkind || {}) },
+    membership: {
+      ...(current.membership || {}),
+      ...(next.membership || {}),
+      lifetime: {
+        ...((current.membership && current.membership.lifetime) || {}),
+        ...((next.membership && next.membership.lifetime) || {}),
+      },
+    },
   }
 }
 
@@ -269,6 +289,33 @@ router.put('/', async (req, res, next) => {
     })
 
     const refreshed = await prisma.trust.findFirst({ where: { id: req.trustId } })
+
+    const lifetimeCfg = refreshed?.settings_json?.membership?.lifetime
+    const membershipEnabled = refreshed?.settings_json?.membership?.enabled
+    if (lifetimeCfg?.amount && lifetimeCfg?.tenure_months) {
+      await prisma.commitmentPlan.upsert({
+        where: { trust_id_code: { trust_id: req.trustId, code: 'LIFETIME' } },
+        create: {
+          trust_id: req.trustId,
+          code: 'LIFETIME',
+          title: lifetimeCfg.title || 'Lifetime Membership',
+          total_amount: lifetimeCfg.amount,
+          tenure_months: lifetimeCfg.tenure_months,
+          is_active: membershipEnabled !== false,
+        },
+        update: {
+          title: lifetimeCfg.title || 'Lifetime Membership',
+          total_amount: lifetimeCfg.amount,
+          tenure_months: lifetimeCfg.tenure_months,
+          is_active: membershipEnabled !== false,
+        },
+      })
+    } else if (membershipEnabled === false) {
+      await prisma.commitmentPlan.updateMany({
+        where: { trust_id: req.trustId, code: 'LIFETIME' },
+        data: { is_active: false },
+      })
+    }
 
     return res.json({
       success: true,
