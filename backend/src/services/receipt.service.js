@@ -87,6 +87,35 @@ const paymentModeMap = {
   ONLINE: 'Online',
 }
 
+const paymentModeHindiMap = {
+  CASH: 'नकद',
+  UPI: 'यूपीआई',
+  CHEQUE: 'चेक',
+  NEFT: 'एनईएफटी',
+  RTGS: 'आरटीजीएस',
+  DD: 'डिमांड ड्राफ्ट',
+  ONLINE: 'ऑनलाइन',
+}
+
+/** Draw Hindi label + Latin/Hindi value without mixing scripts in one PDFKit text(). */
+function textHindiThenValue(doc, hindiLabel, value, x, y, opts = {}) {
+  const size = opts.size || 8
+  const gap = opts.gap ?? 4
+  useHindi(doc, opts.bold)
+  doc.fillColor(opts.color || COLORS.black).fontSize(size)
+  const label = String(hindiLabel || '')
+  const labelW = doc.widthOfString(label)
+  doc.text(label, x, y, { lineBreak: false })
+  const valueStr = String(value ?? '')
+  if (!valueStr) return
+  useFontForText(doc, valueStr, opts.bold)
+  doc.fillColor(opts.color || COLORS.black).fontSize(size)
+  doc.text(` ${valueStr}`, x + labelW + gap, y, {
+    width: opts.width != null ? Math.max(20, opts.width - labelW - gap) : undefined,
+    align: opts.align,
+  })
+}
+
 function drawDoubleBorder(doc, x, y, w, h, primary, secondary) {
   doc.rect(x, y, w, h).lineWidth(2).strokeColor(primary).stroke()
   doc.rect(x + 4, y + 4, w - 8, h - 8).lineWidth(0.75).strokeColor(secondary).stroke()
@@ -240,9 +269,20 @@ async function generateReceiptBuffer(donation, trust) {
       y += amountBoxH + 8
 
       const payLabel = paymentModeMap[donation.payment_mode] || donation.payment_mode
+      const payLabelHi = paymentModeHindiMap[donation.payment_mode] || payLabel
       textLatin(doc, `Payment Mode: ${payLabel}`, innerX, y, { width: innerW, size: 8 })
       y += 11
-      textHindi(doc, `भुगतान विधि: ${payLabel}`, innerX, y, { width: innerW, size: 7.5 })
+      // Never concatenate Latin into textHindi() — PDFKit shows □□□□ for "Cash" etc.
+      if (paymentModeHindiMap[donation.payment_mode]) {
+        textHindi(doc, `भुगतान विधि: ${payLabelHi}`, innerX, y, { width: innerW, size: 7.5 })
+      } else {
+        textHindiThenValue(doc, 'भुगतान विधि:', payLabel, innerX, y, { width: innerW, size: 7.5 })
+      }
+      y += 11
+      textHindiThenValue(doc, 'भुगतान तिथि:', formatDate(donation.donation_date), innerX, y, {
+        width: innerW,
+        size: 7.5,
+      })
       y += 12
 
       if (donation.upi_ref) {
@@ -298,16 +338,19 @@ async function generateReceiptBuffer(donation, trust) {
       y += 40
 
       doc.rect(innerX, y, innerW, 44).fill(secondary)
+      // Use regular (not bold) Devanagari — bold face can miss glyphs → □□□□ on some hosts.
+      // Never mix Latin into this string; fall back if name is empty/mixed/corrupt.
+      const nameHi = String(trust.name_hindi || '').trim()
       const blessing =
-        trust.name_hindi && String(trust.name_hindi).trim()
-          ? `॥ ${String(trust.name_hindi).trim()} ॥`
+        nameHi && hasDevanagari(nameHi) && !/[A-Za-z]/.test(nameHi)
+          ? `॥ ${nameHi} ॥`
           : '॥ जय श्री कृष्ण ॥'
       textHindi(doc, blessing, innerX, y + 8, {
         align: 'center',
         width: innerW,
         size: 10,
         color: '#FFFFFF',
-        bold: true,
+        bold: false,
       })
       textLatin(doc, 'This is a computer-generated receipt.', innerX, y + 24, {
         align: 'center',
