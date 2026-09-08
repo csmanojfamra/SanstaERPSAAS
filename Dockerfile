@@ -11,9 +11,11 @@ RUN apt-get update -y && apt-get install -y --no-install-recommends openssl ca-c
 COPY package.json package-lock.json ./
 RUN npm ci
 
-# Install admin dependencies and build React panel
+# Install admin dependencies and build React panel.
+# Coolify often injects NODE_ENV=production as a build ARG/ENV; that makes
+# `npm ci` skip devDependencies (vite, tailwind, etc.) and admin:build fails.
 COPY admin/package.json admin/package-lock.json ./admin/
-RUN cd admin && npm ci
+RUN cd admin && npm ci --include=dev
 
 COPY backend ./backend
 COPY admin ./admin
@@ -32,7 +34,8 @@ RUN mkdir -p backend/fonts \
   && test -s backend/fonts/NotoSansDevanagari-Regular.ttf \
   && test -s backend/fonts/NotoSansDevanagari-Bold.ttf
 
-RUN npm run admin:build
+# Build admin with enough heap; keep vite available regardless of Coolify NODE_ENV
+RUN NODE_OPTIONS=--max-old-space-size=2048 npm run admin:build
 RUN npx prisma generate --schema=backend/prisma/schema.prisma
 
 ENV NODE_ENV=production
