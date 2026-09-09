@@ -393,12 +393,12 @@ export default function Donations() {
         title="Donation Register"
         mobileTitle="Donations"
         description="Receipt management, donor tracking and collection governance for the trust."
-        mobileAction={<HeaderIconButton icon={Plus} label="Record donation" to="/donations/new" />}
+        mobileAction={<HeaderIconButton icon={Plus} label="New receipt" to="/donations/new" />}
       >
         <Button asChild>
           <Link to="/donations/new">
             <Plus className="h-4 w-4" />
-            Record Donation
+            New Receipt
           </Link>
         </Button>
       </PageHeader>

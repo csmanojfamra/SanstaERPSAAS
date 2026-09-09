@@ -28,6 +28,7 @@ export function useUpdateLifetimePlan() {
 export function useCommitmentMembers(params) {
   return useQuery({
     queryKey: ['commitment-members', params],
+    enabled: params != null,
     queryFn: async () => {
       const { data } = await api.get('/commitments/members', { params })
       return data
