@@ -972,7 +972,7 @@ router.get('/export-excel', async (req, res, next) => {
           orderBy: [{ receipt_date: 'desc' }],
           include: { lines: { include: { stock_item: true } } },
         })
-        const headers = ['Receipt No', 'Date', 'Donor', 'Mobile', 'City', 'Item', 'Qty', 'Unit', 'Est. Value', 'Notes']
+        const headers = ['Receipt No', 'Date', 'Donor', 'Mobile', 'City', 'Item', 'Qty', 'Unit', 'Weight', 'Weight Unit', 'Est. Value', 'Notes']
         const rows = []
         for (const r of receipts) {
           for (const line of r.lines) {
@@ -985,6 +985,8 @@ router.get('/export-excel', async (req, res, next) => {
               line.stock_item?.name || '',
               decimalToNumber(line.quantity),
               line.stock_item?.unit || '',
+              line.weight != null ? decimalToNumber(line.weight) : '',
+              line.weight_unit || '',
               line.estimated_value != null ? decimalToNumber(line.estimated_value) : '',
               r.notes || '',
             ])

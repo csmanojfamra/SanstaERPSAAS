@@ -1,20 +1,21 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Trash2 } from 'lucide-react'
 import PageHeader from '@/components/layout/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent } from '@/components/ui/card'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import RequiredLabel from '@/components/common/RequiredLabel'
+import InKindLinesEditor, {
+  emptyInKindLine,
+  mapInKindLinesForApi,
+} from '@/components/inkind/InKindLinesEditor'
 import { useStockItems, useCreateInKindReceipt } from '@/hooks/useInKind'
 import { todayISO } from '@/utils/formatters'
 import { getApiErrorMessage } from '@/lib/api'
 import { toast } from '@/hooks/use-toast'
-
-const emptyLine = () => ({ stock_item_id: '', quantity: '', description: '', estimated_value: '' })
+import { confirmBackdatedEntry } from '@/lib/formHelpers'
 
 export default function NewInKindReceipt() {
   const navigate = useNavigate()
@@ -30,32 +31,32 @@ export default function NewInKindReceipt() {
     notes: '',
     estimated_value: '',
   })
-  const [lines, setLines] = useState([emptyLine()])
-
-  const updateLine = (idx, patch) => {
-    setLines((prev) => prev.map((line, i) => (i === idx ? { ...line, ...patch } : line)))
-  }
+  const [lines, setLines] = useState([emptyInKindLine()])
 
   const onSubmit = async (e) => {
     e.preventDefault()
-    const payload = {
-      ...form,
-      estimated_value: form.estimated_value === '' ? null : Number(form.estimated_value),
-      lines: lines
-        .filter((l) => l.stock_item_id && l.quantity)
-        .map((l) => ({
-          stock_item_id: l.stock_item_id,
-          quantity: Number(l.quantity),
-          description: l.description || '',
-          estimated_value: l.estimated_value === '' ? null : Number(l.estimated_value),
-        })),
+    if (!form.donor_name.trim() || form.donor_name.trim().length < 2) {
+      toast({ title: 'Enter donor name', variant: 'destructive' })
+      return
     }
-    if (!payload.lines.length) {
+    if (form.donor_mobile && !/^[6-9]\d{9}$/.test(form.donor_mobile)) {
+      toast({ title: 'Enter a valid 10-digit mobile (or leave blank)', variant: 'destructive' })
+      return
+    }
+    if (!confirmBackdatedEntry(form.receipt_date, 'in-kind receipt')) return
+
+    const payloadLines = mapInKindLinesForApi(lines)
+    if (!payloadLines.length) {
       toast({ title: 'Add at least one item line', variant: 'destructive' })
       return
     }
+
     try {
-      const data = await createReceipt.mutateAsync(payload)
+      const data = await createReceipt.mutateAsync({
+        ...form,
+        estimated_value: form.estimated_value === '' ? null : Number(form.estimated_value),
+        lines: payloadLines,
+      })
       toast({ title: 'In-kind receipt saved', description: data.receipt?.receipt_number })
       navigate('/inkind')
     } catch (err) {
@@ -67,19 +68,32 @@ export default function NewInKindReceipt() {
     <div className="space-y-4">
       <PageHeader
         title="New In-Kind Receipt"
-        description="Record gold, clothes, materials and other non-cash donations. Stock increases automatically."
+        description="Record gold, clothes, materials and other non-cash donations. Stock quantity increases; weight is optional detail."
       />
-      <Card>
-        <CardContent className="pt-6">
-          <form onSubmit={onSubmit} className="space-y-4">
+      <Card className="max-w-3xl">
+        <CardContent className="space-y-5 pt-6">
+          <form onSubmit={onSubmit} className="space-y-5">
+            <div className="rounded-md border border-border/60 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+              Does not post to Cash Book. For jewellery, set Qty to pieces and enter Weight separately (g / tola).
+            </div>
+
             <div className="grid gap-3 sm:grid-cols-2">
-              <div>
+              <div className="sm:col-span-2">
                 <RequiredLabel>Donor name</RequiredLabel>
-                <Input value={form.donor_name} onChange={(e) => setForm({ ...form, donor_name: e.target.value })} required />
+                <Input
+                  value={form.donor_name}
+                  onChange={(e) => setForm({ ...form, donor_name: e.target.value })}
+                  required
+                />
               </div>
               <div>
                 <Label>Mobile</Label>
-                <Input value={form.donor_mobile} onChange={(e) => setForm({ ...form, donor_mobile: e.target.value })} placeholder="10-digit mobile" />
+                <Input
+                  value={form.donor_mobile}
+                  onChange={(e) => setForm({ ...form, donor_mobile: e.target.value })}
+                  placeholder="Optional 10-digit"
+                  maxLength={10}
+                />
               </div>
               <div>
                 <Label>City</Label>
@@ -87,66 +101,40 @@ export default function NewInKindReceipt() {
               </div>
               <div>
                 <RequiredLabel>Receipt date</RequiredLabel>
-                <Input type="date" value={form.receipt_date} onChange={(e) => setForm({ ...form, receipt_date: e.target.value })} required />
+                <Input
+                  type="date"
+                  max={todayISO()}
+                  value={form.receipt_date}
+                  onChange={(e) => setForm({ ...form, receipt_date: e.target.value })}
+                  required
+                />
               </div>
               <div>
                 <Label>Estimated total value (₹, optional)</Label>
-                <Input type="number" min="0" step="any" value={form.estimated_value} onChange={(e) => setForm({ ...form, estimated_value: e.target.value })} />
+                <Input
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={form.estimated_value}
+                  onChange={(e) => setForm({ ...form, estimated_value: e.target.value })}
+                />
               </div>
             </div>
 
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold">Items received</h3>
-                <Button type="button" variant="outline" size="sm" onClick={() => setLines((p) => [...p, emptyLine()])}>
-                  <Plus className="mr-1 h-3.5 w-3.5" /> Add line
-                </Button>
-              </div>
-              {lines.map((line, idx) => (
-                <div key={idx} className="grid gap-2 rounded-md border p-3 sm:grid-cols-12">
-                  <div className="sm:col-span-4">
-                    <Label>Item</Label>
-                    <Select value={line.stock_item_id} onValueChange={(v) => updateLine(idx, { stock_item_id: v })}>
-                      <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-                      <SelectContent>
-                        {items.map((i) => (
-                          <SelectItem key={i.id} value={i.id}>{i.name} ({i.unit})</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="sm:col-span-2">
-                    <Label>Qty</Label>
-                    <Input type="number" min="0.001" step="any" value={line.quantity} onChange={(e) => updateLine(idx, { quantity: e.target.value })} required />
-                  </div>
-                  <div className="sm:col-span-3">
-                    <Label>Description</Label>
-                    <Input value={line.description} onChange={(e) => updateLine(idx, { description: e.target.value })} placeholder="e.g. Gold chain" />
-                  </div>
-                  <div className="sm:col-span-2">
-                    <Label>Est. ₹</Label>
-                    <Input type="number" min="0" step="any" value={line.estimated_value} onChange={(e) => updateLine(idx, { estimated_value: e.target.value })} />
-                  </div>
-                  <div className="flex items-end sm:col-span-1">
-                    <Button type="button" variant="ghost" size="icon" disabled={lines.length === 1} onClick={() => setLines((p) => p.filter((_, i) => i !== idx))}>
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
-              {!items.length ? (
-                <p className="text-sm text-muted-foreground">No stock items yet. Add an item from In-Kind Stock first.</p>
-              ) : null}
-            </div>
+            <InKindLinesEditor items={items} lines={lines} onChange={setLines} />
 
             <div>
               <Label>Notes</Label>
               <Textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
             </div>
 
-            <div className="flex gap-2">
-              <Button type="button" variant="outline" onClick={() => navigate('/inkind')}>Cancel</Button>
-              <Button type="submit" disabled={createReceipt.isPending}>Save receipt</Button>
+            <div className="flex gap-2 border-t pt-4">
+              <Button type="submit" disabled={createReceipt.isPending}>
+                {createReceipt.isPending ? 'Saving...' : 'Save receipt'}
+              </Button>
+              <Button type="button" variant="outline" onClick={() => navigate('/inkind')}>
+                Cancel
+              </Button>
             </div>
           </form>
         </CardContent>

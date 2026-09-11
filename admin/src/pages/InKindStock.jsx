@@ -186,7 +186,15 @@ export default function InKindStock() {
                     </p>
                   </div>
                   <p className="text-xs">
-                    {r.estimated_value != null ? formatCurrency(r.estimated_value) : `${r.lines?.length || 0} line(s)`}
+                    {r.estimated_value != null
+                      ? formatCurrency(r.estimated_value)
+                      : `${r.lines?.length || 0} line(s)`}
+                    {r.lines?.some((l) => l.weight != null)
+                      ? ` · wt ${r.lines
+                          .filter((l) => l.weight != null)
+                          .map((l) => `${Number(l.weight)}${l.weight_unit || 'g'}`)
+                          .join(', ')}`
+                      : ''}
                   </p>
                 </div>
               ))

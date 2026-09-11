@@ -18,6 +18,8 @@ const stockItemSchema = z.object({
 const receiptLineSchema = z.object({
   stock_item_id: z.string().min(1),
   quantity: z.coerce.number().positive(),
+  weight: z.coerce.number().positive().optional().nullable(),
+  weight_unit: z.string().max(20).optional().or(z.literal('')).nullable(),
   description: z.string().max(300).optional().or(z.literal('')),
   estimated_value: z.coerce.number().nonnegative().optional().nullable(),
 })
@@ -242,12 +244,17 @@ router.post('/receipts', async (req, res, next) => {
           estimated_value: estimatedValue,
           created_by: req.user?.id || null,
           lines: {
-            create: data.lines.map((line) => ({
-              stock_item_id: line.stock_item_id,
-              quantity: line.quantity,
-              description: line.description || null,
-              estimated_value: line.estimated_value ?? null,
-            })),
+            create: data.lines.map((line) => {
+              const hasWeight = line.weight != null && line.weight !== '' && Number(line.weight) > 0
+              return {
+                stock_item_id: line.stock_item_id,
+                quantity: line.quantity,
+                weight: hasWeight ? line.weight : null,
+                weight_unit: hasWeight ? (line.weight_unit || 'g') : null,
+                description: line.description || null,
+                estimated_value: line.estimated_value ?? null,
+              }
+            }),
           },
         },
         include: {

@@ -392,6 +392,9 @@ model InKindReceiptLine {
   stock_item_id   String
   stock_item      StockItem    @relation(fields: [stock_item_id], references: [id])
   quantity        Decimal      @db.Decimal(12, 3)
+  /// Optional physical measure (e.g. gold jewellery: qty 1 chain, weight 12.5 g)
+  weight          Decimal?     @db.Decimal(12, 3)
+  weight_unit     String?
   description     String?
   estimated_value Decimal?     @db.Decimal(12, 2)
 

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { ChevronDown, Plus, Trash2 } from 'lucide-react'
+import { ChevronDown } from 'lucide-react'
 import PageHeader from '@/components/layout/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -12,12 +12,16 @@ import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useCreateDonation } from '@/hooks/useDonations'
-import { useStockItems, useCreateInKindReceipt, useCreateStockItem } from '@/hooks/useInKind'
+import { useStockItems, useCreateInKindReceipt } from '@/hooks/useInKind'
 import {
   useCommitmentMembers,
   useEnrollMember,
   useLifetimePlan,
 } from '@/hooks/useCommitments'
+import InKindLinesEditor, {
+  emptyInKindLine,
+  mapInKindLinesForApi,
+} from '@/components/inkind/InKindLinesEditor'
 import { formatCurrency, formatPaymentMode, todayISO } from '@/utils/formatters'
 import api, { getApiErrorMessage } from '@/lib/api'
 import { validateDonationPaymentRefs, confirmBackdatedEntry } from '@/lib/formHelpers'
@@ -55,8 +59,6 @@ const RECEIPT_TYPES = [
     hint: 'Enroll or record installment → donation receipt',
   },
 ]
-
-const emptyLine = () => ({ stock_item_id: '', quantity: '', description: '', estimated_value: '' })
 
 const cashSchema = z
   .object({
@@ -114,14 +116,12 @@ export default function NewDonation() {
 
   const createDonation = useCreateDonation()
   const createInKind = useCreateInKindReceipt()
-  const createStockItem = useCreateStockItem()
   const enrollMember = useEnrollMember()
   const { data: planData } = useLifetimePlan()
   const { data: itemsData } = useStockItems(false)
   const stockItems = itemsData?.items || []
   const plan = planData?.plan
 
-  // In-kind local state
   const [inkindForm, setInkindForm] = useState({
     donor_name: '',
     donor_mobile: '',
@@ -130,11 +130,8 @@ export default function NewDonation() {
     notes: '',
     estimated_value: '',
   })
-  const [lines, setLines] = useState([emptyLine()])
-  const [newItemName, setNewItemName] = useState('')
-  const [newItemUnit, setNewItemUnit] = useState('pcs')
+  const [lines, setLines] = useState([emptyInKindLine()])
 
-  // Lifetime local state
   const [lifeForm, setLifeForm] = useState({
     name: '',
     mobile: '',
@@ -213,10 +210,6 @@ export default function NewDonation() {
     }
   }, [matchedMember, lifeForm.amount])
 
-  const updateLine = (idx, patch) => {
-    setLines((prev) => prev.map((line, i) => (i === idx ? { ...line, ...patch } : line)))
-  }
-
   const onSubmitCash = async (values) => {
     if (!confirmBackdatedEntry(values.donation_date, 'donation')) return
     try {
@@ -243,14 +236,7 @@ export default function NewDonation() {
       return
     }
     if (!confirmBackdatedEntry(inkindForm.receipt_date, 'in-kind receipt')) return
-    const payloadLines = lines
-      .filter((l) => l.stock_item_id && l.quantity)
-      .map((l) => ({
-        stock_item_id: l.stock_item_id,
-        quantity: Number(l.quantity),
-        description: l.description || '',
-        estimated_value: l.estimated_value === '' ? null : Number(l.estimated_value),
-      }))
+    const payloadLines = mapInKindLinesForApi(lines)
     if (!payloadLines.length) {
       toast({ title: 'Add at least one stock item line', variant: 'destructive' })
       return
@@ -268,34 +254,6 @@ export default function NewDonation() {
       toast({ title: 'Could not save in-kind receipt', description: getApiErrorMessage(err), variant: 'destructive' })
     } finally {
       setSaving(false)
-    }
-  }
-
-  const onQuickAddItem = async () => {
-    const name = newItemName.trim()
-    if (!name) {
-      toast({ title: 'Enter item name', variant: 'destructive' })
-      return
-    }
-    try {
-      const data = await createStockItem.mutateAsync({
-        name,
-        unit: newItemUnit.trim() || 'pcs',
-      })
-      toast({ title: 'Stock item added', description: data.item?.name })
-      setNewItemName('')
-      setNewItemUnit('pcs')
-      if (data.item?.id) {
-        setLines((prev) => {
-          const next = [...prev]
-          const emptyIdx = next.findIndex((l) => !l.stock_item_id)
-          if (emptyIdx >= 0) next[emptyIdx] = { ...next[emptyIdx], stock_item_id: data.item.id }
-          else next.push({ ...emptyLine(), stock_item_id: data.item.id })
-          return next
-        })
-      }
-    } catch (err) {
-      toast({ title: 'Could not add item', description: getApiErrorMessage(err), variant: 'destructive' })
     }
   }
 
@@ -558,14 +516,15 @@ export default function NewDonation() {
       ) : null}
 
       {receiptType === 'IN_KIND' ? (
-        <Card className="w-full max-w-2xl">
-          <CardContent className="pt-6">
-            <form onSubmit={onSubmitInKind} className="space-y-4">
-              <p className="text-xs text-muted-foreground">
-                Goods receipt updates stock only. It does not post to Cash Book.
-              </p>
+        <Card className="w-full max-w-3xl">
+          <CardContent className="space-y-5 pt-6">
+            <form onSubmit={onSubmitInKind} className="space-y-5">
+              <div className="rounded-md border border-border/60 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+                In-kind goods update stock only — they are not posted to Cash Book. Use weight for jewellery / metal (qty can stay 1 pcs).
+              </div>
+
               <div className="grid gap-3 sm:grid-cols-2">
-                <div>
+                <div className="sm:col-span-2">
                   <RequiredLabel>Donor name</RequiredLabel>
                   <Input
                     value={inkindForm.donor_name}
@@ -611,93 +570,7 @@ export default function NewDonation() {
                 </div>
               </div>
 
-              <div className="rounded-md border border-dashed p-3">
-                <p className="mb-2 text-xs font-medium text-muted-foreground">Quick-add stock item (if missing)</p>
-                <div className="flex flex-wrap gap-2">
-                  <Input
-                    className="max-w-[180px]"
-                    placeholder="Item name"
-                    value={newItemName}
-                    onChange={(e) => setNewItemName(e.target.value)}
-                  />
-                  <Input
-                    className="w-24"
-                    placeholder="Unit"
-                    value={newItemUnit}
-                    onChange={(e) => setNewItemUnit(e.target.value)}
-                  />
-                  <Button type="button" variant="outline" size="sm" onClick={onQuickAddItem} disabled={createStockItem.isPending}>
-                    Add item
-                  </Button>
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-semibold">Items received</h3>
-                  <Button type="button" variant="outline" size="sm" onClick={() => setLines((p) => [...p, emptyLine()])}>
-                    <Plus className="mr-1 h-3.5 w-3.5" /> Add line
-                  </Button>
-                </div>
-                {lines.map((line, idx) => (
-                  <div key={idx} className="grid gap-2 rounded-md border p-3 sm:grid-cols-12">
-                    <div className="sm:col-span-4">
-                      <Label>Item</Label>
-                      <Select value={line.stock_item_id} onValueChange={(v) => updateLine(idx, { stock_item_id: v })}>
-                        <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-                        <SelectContent>
-                          {stockItems.map((i) => (
-                            <SelectItem key={i.id} value={i.id}>{i.name} ({i.unit})</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="sm:col-span-2">
-                      <Label>Qty</Label>
-                      <Input
-                        type="number"
-                        min="0.001"
-                        step="any"
-                        value={line.quantity}
-                        onChange={(e) => updateLine(idx, { quantity: e.target.value })}
-                        required
-                      />
-                    </div>
-                    <div className="sm:col-span-3">
-                      <Label>Description</Label>
-                      <Input
-                        value={line.description}
-                        onChange={(e) => updateLine(idx, { description: e.target.value })}
-                        placeholder="e.g. Gold chain"
-                      />
-                    </div>
-                    <div className="sm:col-span-2">
-                      <Label>Est. ₹</Label>
-                      <Input
-                        type="number"
-                        min="0"
-                        step="any"
-                        value={line.estimated_value}
-                        onChange={(e) => updateLine(idx, { estimated_value: e.target.value })}
-                      />
-                    </div>
-                    <div className="flex items-end sm:col-span-1">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        disabled={lines.length === 1}
-                        onClick={() => setLines((p) => p.filter((_, i) => i !== idx))}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-                {!stockItems.length ? (
-                  <p className="text-sm text-muted-foreground">No stock items yet — use Quick-add above or In-Kind Stock.</p>
-                ) : null}
-              </div>
+              <InKindLinesEditor items={stockItems} lines={lines} onChange={setLines} />
 
               <div>
                 <Label>Notes</Label>
@@ -707,7 +580,7 @@ export default function NewDonation() {
                 />
               </div>
 
-              <div className="flex gap-2">
+              <div className="flex gap-2 border-t pt-4">
                 <Button type="submit" disabled={saving || createInKind.isPending}>
                   {saving ? 'Saving...' : 'Save in-kind receipt'}
                 </Button>
