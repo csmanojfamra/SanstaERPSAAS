@@ -26,6 +26,7 @@ import {
 import { useReconciliation } from '@/hooks/useAnalytics'
 import { useStockReport, useStockMovements } from '@/hooks/useInKind'
 import { useCommitmentSummary } from '@/hooks/useCommitments'
+import { exportAccountingExcel } from '@/hooks/useAccounting'
 import { formatCurrency, formatPaymentMode, todayISO } from '@/utils/formatters'
 import { toast } from '@/hooks/use-toast'
 import { getApiErrorMessage } from '@/lib/api'
@@ -68,6 +69,9 @@ const REPORT_MODULES = [
   { id: 'daily_register', category: 'Operational Reports', title: 'Daily Collection & Expense Register', purpose: 'Daily operations register with receipt, voucher and verification signals.', exportType: 'full', metricKey: 'daily' },
   { id: 'monthly_collection', category: 'Operational Reports', title: 'Monthly Collection Summary', purpose: 'Period-based collection summary for operations monitoring.', exportType: 'donations', metricKey: 'donationRange' },
   { id: 'annual_overview', category: 'Accounting Reports', title: 'Annual Financial Overview', purpose: 'FY-level donation, expense and net surplus/deficit overview.', exportType: 'full', metricKey: 'financial' },
+  { id: 'trial_balance', category: 'Accounting Reports', title: 'Trial Balance (तलपट)', purpose: 'Account-wise period debits, credits, and closing balances ensuring double-entry balance.', exportType: 'accounting_tb', metricKey: 'accountingTb' },
+  { id: 'income_expenditure', category: 'Accounting Reports', title: 'Income & Expenditure Account (आय-व्यय)', purpose: 'Statutory Revenue Account for Charitable Trusts showing total donations vs expenditures and net surplus.', exportType: 'accounting_ie', metricKey: 'accountingIe' },
+  { id: 'statement_of_affairs', category: 'Accounting Reports', title: 'Statement of Affairs (Balance Sheet - स्थिति विवरण)', purpose: 'Trust Balance Sheet comparing Assets (Cash, Bank, Properties) against Corpus Funds, Reserves & Liabilities.', exportType: 'accounting_bs', metricKey: 'accountingBs' },
   { id: 'expense_register', category: 'Expense Reports', title: 'Expense Register', purpose: 'Voucher-style expense register for audit and governance checks.', exportType: 'expenses', metricKey: 'expense' },
   { id: 'donation_register', category: 'Donation Reports', title: 'Donation Collection Register', purpose: 'Receipt-wise and donor-wise collection report for trust accounting.', exportType: 'donations', metricKey: 'donationRange' },
   { id: 'mode_wise', category: 'Donation Reports', title: 'Mode-wise Collection Report', purpose: 'Cash/UPI/Bank/Cheque mix for control and compliance insights.', exportType: 'donations', metricKey: 'paymentMode' },
@@ -179,6 +183,9 @@ export default function Reports() {
       membership: m
         ? `${m.members_total} members · collected ${formatCurrency(m.amount_collected)} · pending ${formatCurrency(m.amount_pending)}`
         : 'No membership data yet',
+      accountingTb: 'Double-entry trial balance verifying all account debit and credit totals',
+      accountingIe: 'Statutory Trust Revenue Account: Donations vs Expenditures & Net Surplus',
+      accountingBs: 'Statutory Balance Sheet: Assets vs Corpus Funds, Reserves & Liabilities',
     }
   }, [daily.data, dailyExpenseSummary.data, dateRangeReport.data, expenseSummary.data, paymentModes.data, trusteeReport.data, reconciliation.data, financialSummary.data, stockReport.data, utiliseMovements.data, membershipSummary.data])
 
@@ -249,7 +256,22 @@ export default function Reports() {
   const handleExport = async (type, reportName = 'Report') => {
     setExporting(true)
     try {
-      await exportExcel(type, baseExportParams)
+      if (type.startsWith('accounting_')) {
+        const subType =
+          type === 'accounting_tb'
+            ? 'trial-balance'
+            : type === 'accounting_ie'
+            ? 'income-expenditure'
+            : 'statement-of-affairs'
+        await exportAccountingExcel(subType, {
+          date_from: dateFrom || undefined,
+          date_to: dateTo || undefined,
+          as_of_date: dateTo || undefined,
+          fy: financialYear,
+        })
+      } else {
+        await exportExcel(type, baseExportParams)
+      }
       pushHistory(reportName, 'Excel')
       toast({ title: 'Export downloaded' })
     } catch (err) {
@@ -267,6 +289,13 @@ export default function Reports() {
   }
 
   const handlePdfExport = async (module) => {
+    if (module.exportType?.startsWith('accounting_')) {
+      toast({
+        title: 'Accounting Export',
+        description: 'Please use Excel export for complete multi-column ledger & statutory balance breakdown.',
+      })
+      return
+    }
     setExporting(true)
     try {
       await exportPdf(mapModuleToPdfType(module), baseExportParams)

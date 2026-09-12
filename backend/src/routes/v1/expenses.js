@@ -9,6 +9,7 @@ const { createAuditLog } = require('../../services/audit.service')
 const { createNotification } = require('../../services/notification.service')
 const { getAuditContext } = require('../../utils/auditContext')
 const { generateExpenseVoucherPdf } = require('../../services/expenseVoucher.service')
+const { postExpenseJournal, reverseExpenseJournal } = require('../../services/accounting.service')
 
 const CATEGORY_LABELS = {
   LABOUR_CONSTRUCTION: 'Labour & Construction',
@@ -605,6 +606,12 @@ router.post('/', upload.single('attachment'), async (req, res, next) => {
       })
     }
 
+    try {
+      await postExpenseJournal(expense, req.user?.username || 'OPERATOR')
+    } catch (accErr) {
+      logger.error('Failed to post expense journal', { error: accErr.message, expenseId: expense.id })
+    }
+
     res.status(201).json({
       success: true,
       message: 'Expense voucher recorded successfully',
@@ -847,6 +854,12 @@ router.delete('/:id', async (req, res, next) => {
       description: `Expense deleted: ${existing.description}`,
       metadata: { amount: existing.amount, category: existing.category },
     })
+
+    try {
+      await reverseExpenseJournal(existing, req.user?.username || 'ADMIN')
+    } catch (accErr) {
+      logger.error('Failed to reverse expense journal', { error: accErr.message, expenseId: existing.id })
+    }
 
     res.json({
       success: true,

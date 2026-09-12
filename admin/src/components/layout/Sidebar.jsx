@@ -13,6 +13,7 @@ import {
   Building2,
   Package,
   BadgeCheck,
+  Landmark,
 } from 'lucide-react'
 import { useAuthStore } from '@/store/useAuthStore'
 import { Button } from '@/components/ui/button'
@@ -34,6 +35,7 @@ const navSections = [
     title: 'Finance',
     items: [
       { to: '/cash-book', label: 'Cash Ledger', mobileLabel: 'Cash Book', subtitle: 'Debit/Credit balances', icon: BookOpen, adminOnly: true },
+      { to: '/accounting', label: 'Trust Accounting & Books', mobileLabel: 'Accounting', subtitle: 'Double-entry & journals', icon: Landmark, adminOnly: true },
       { to: '/reconciliation', label: 'Bank Reconciliation', mobileLabel: 'Reconciliation', subtitle: 'Match transactions', icon: ClipboardCheck },
       { to: '/reports', label: 'Financial Reports & Registers', mobileLabel: 'Reports', subtitle: 'Compliance & audit reporting', icon: FileBarChart },
     ],

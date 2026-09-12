@@ -52,6 +52,8 @@ model Trust {
   stock_movements     StockMovement[]
   commitment_plans    CommitmentPlan[]
   commitment_members  CommitmentMember[]
+  accounts            Account[]
+  journal_entries     JournalEntry[]
 }
 
 model User {
@@ -473,4 +475,88 @@ model CommitmentInstallment {
 
   @@index([member_id, payment_date])
 }
+
+enum AccountType {
+  ASSET
+  LIABILITY
+  CORPUS
+  INCOME
+  EXPENSE
+}
+
+enum NormalBalance {
+  DEBIT
+  CREDIT
+}
+
+enum VoucherType {
+  RECEIPT
+  PAYMENT
+  JOURNAL
+  OPENING
+  CONTRA
+}
+
+model Account {
+  id               String        @id @default(cuid())
+  trust_id         String
+  trust            Trust         @relation(fields: [trust_id], references: [id])
+  code             String
+  name             String
+  account_type     AccountType
+  normal_balance   NormalBalance @default(DEBIT)
+  is_system        Boolean       @default(false)
+  is_active        Boolean       @default(true)
+  expense_category String?
+  purpose_key      String?
+  description      String?
+  created_at       DateTime      @default(now())
+  updated_at       DateTime      @updatedAt
+
+  journal_lines    JournalLine[]
+
+  @@unique([trust_id, code])
+  @@index([trust_id, account_type])
+  @@index([trust_id, is_active])
+}
+
+model JournalEntry {
+  id             String        @id @default(cuid())
+  trust_id       String
+  trust          Trust         @relation(fields: [trust_id], references: [id])
+  entry_number   String
+  entry_date     DateTime      @db.Date
+  voucher_type   VoucherType   @default(JOURNAL)
+  narration      String?
+  source_type    String?
+  source_id      String?
+  fy             String?
+  created_by     String?
+  is_reversed    Boolean       @default(false)
+  reversed_by_id String?
+  created_at     DateTime      @default(now())
+  updated_at     DateTime      @updatedAt
+
+  lines          JournalLine[]
+
+  @@unique([trust_id, entry_number])
+  @@index([trust_id, entry_date])
+  @@index([trust_id, fy])
+  @@index([trust_id, source_type, source_id])
+}
+
+model JournalLine {
+  id               String       @id @default(cuid())
+  journal_entry_id String
+  journal_entry    JournalEntry @relation(fields: [journal_entry_id], references: [id], onDelete: Cascade)
+  account_id       String
+  account          Account      @relation(fields: [account_id], references: [id])
+  debit            Decimal      @default(0) @db.Decimal(12, 2)
+  credit           Decimal      @default(0) @db.Decimal(12, 2)
+  narration        String?
+
+  @@index([journal_entry_id])
+  @@index([account_id])
+}
+
 

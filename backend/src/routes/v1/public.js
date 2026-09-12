@@ -244,15 +244,24 @@ router.get('/trustees/:trustId', async (req, res, next) => {
 
     const response = {
       success: true,
-      trustees: rows.map((t) => ({
-        id: t.id,
-        name: t.name,
-        name_hindi: t.name_hindi || null,
-        ...publicTrusteeRoleFields(t.role),
-        mobile: t.mobile || null,
-        photo_url: resolvePublicAssetUrl(t.photo_url),
-        display_order: t.display_order,
-      })),
+      trustees: rows.map((t) => {
+        const roles = publicTrusteeRoleFields(t.role)
+        const displayName = t.name_hindi || t.name
+        const displayRole = roles.role_hindi || roles.role || null
+        return {
+          id: t.id,
+          name: t.name,
+          name_hindi: t.name_hindi || null,
+          ...roles,
+          mobile: t.mobile || null,
+          photo_url: resolvePublicAssetUrl(t.photo_url),
+          display_order: t.display_order,
+          // Aliases for public website js/main.js
+          trustee_name: displayName,
+          role: displayRole,
+          phone: t.mobile || null,
+        }
+      }),
     }
 
     setCache(cacheKey, response)

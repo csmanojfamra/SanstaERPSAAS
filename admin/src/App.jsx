@@ -17,6 +17,7 @@ import Reconciliation from '@/pages/Reconciliation'
 import AuditLogs from '@/pages/AuditLogs'
 import Settings from '@/pages/Settings'
 import CashBook from '@/pages/CashBook'
+import Accounting from '@/pages/Accounting'
 import InKindStock from '@/pages/InKindStock'
 import NewInKindReceipt from '@/pages/NewInKindReceipt'
 import Memberships from '@/pages/Memberships'
@@ -73,6 +74,14 @@ export default function App() {
                   element={
                     <AdminRoute>
                       <CashBook />
+                    </AdminRoute>
+                  }
+                />
+                <Route
+                  path="accounting"
+                  element={
+                    <AdminRoute>
+                      <Accounting />
                     </AdminRoute>
                   }
                 />

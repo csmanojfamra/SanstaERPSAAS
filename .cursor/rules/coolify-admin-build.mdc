@@ -1,0 +1,22 @@
+---
+description: Always verify admin Docker/Vite build before push; never invent UI exports
+alwaysApply: true
+---
+
+# Coolify / admin build safety
+
+Live deploys via Coolify Docker. `RUN npm run admin:build` must succeed or the whole deploy fails and the old container stays up.
+
+## Before committing admin or Dockerfile changes
+
+1. Confirm every named import exists in the source file (check `export { ... }` / default export). Do not assume shadcn exports like `DialogFooter` exist — this repo often uses `FormDialogFooter` instead.
+2. Prefer existing patterns in Expenses/Donations/Trustees over new UI primitives.
+3. Verify build before push when admin pages/components or Dockerfile changed:
+   - Preferred: `docker build -t sansta-erp-test .` (matches Coolify)
+   - Or: `cd admin && npm run build`
+4. Dockerfile: admin install must use `npm ci --include=dev` so Vite/Tailwind install even if Coolify sets `NODE_ENV=production`.
+
+## After push
+
+- Coolify auto-deploy may be broken; if live uptime stays huge, tell the user to Redeploy and check Deployments logs for `admin:build` / `MISSING_EXPORT`.
+- Receipt/expense fixes only appear after a successful new container start (short health uptime).

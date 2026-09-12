@@ -7,6 +7,7 @@ const { getAuditContext } = require('../../utils/auditContext')
 const { generateReceiptNumber } = require('../../services/receiptNumber.service')
 const { generateReceiptBuffer } = require('../../services/receipt.service')
 const { saveReceiptPDF } = require('../../services/storage.service')
+const { postDonationJournal } = require('../../services/accounting.service')
 
 const LIFETIME_CODE = 'LIFETIME'
 
@@ -371,6 +372,12 @@ router.post('/members/:id/payments', async (req, res, next) => {
       })
     } catch {
       // Receipt PDF failure should not roll back payment
+    }
+
+    try {
+      await postDonationJournal(result.donation, req.user?.username || 'OPERATOR')
+    } catch {
+      // Accounting journal posting failure should not roll back payment
     }
 
     await createAuditLog({

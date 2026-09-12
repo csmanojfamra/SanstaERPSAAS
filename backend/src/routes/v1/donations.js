@@ -17,6 +17,7 @@ const logger = require('../../utils/logger')
 const { createAuditLog } = require('../../services/audit.service')
 const { createNotification } = require('../../services/notification.service')
 const { getAuditContext } = require('../../utils/auditContext')
+const { postDonationJournal, reverseDonationJournal } = require('../../services/accounting.service')
 
 function donationAmount(d) {
   return Number(d.amount) || 0
@@ -222,6 +223,12 @@ router.post('/', async (req, res, next) => {
     }
 
     await generateAndUploadReceipt(donation, req.trust)
+
+    try {
+      await postDonationJournal(donation, req.user?.username || 'OPERATOR')
+    } catch (accErr) {
+      logger.error('Failed to post donation journal', { error: accErr.message, donationId: donation.id })
+    }
 
     res.status(201).json({
       success: true,
@@ -1015,6 +1022,12 @@ router.delete('/:id', async (req, res, next) => {
       description: `Donation deleted: ${existing.receipt_number}`,
       metadata: { amount: existing.amount, donor: existing.donor_name },
     })
+
+    try {
+      await reverseDonationJournal(existing, req.user?.username || 'ADMIN')
+    } catch (accErr) {
+      logger.error('Failed to reverse donation journal', { error: accErr.message, donationId: existing.id })
+    }
 
     res.json({
       success: true,
