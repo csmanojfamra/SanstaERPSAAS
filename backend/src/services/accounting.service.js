@@ -217,6 +217,61 @@ async function ensureExpenseAccount(trustId, category, tx = prismaClient) {
 }
 
 /**
+ * Looks up or auto-creates a Party / Vendor Ledger under Sundry Creditors (2xxx).
+ */
+async function ensurePartyAccount(trustId, partyName, tx = prismaClient) {
+  await ensureDefaultAccounts(trustId, tx)
+
+  const cleanName = String(partyName || '').trim()
+  if (!cleanName) {
+    return tx.account.findUnique({
+      where: { trust_id_code: { trust_id: trustId, code: '2001' } },
+    })
+  }
+
+  const normalizedKey = 'party_' + cleanName.toLowerCase().replace(/[^a-z0-9]+/g, '_').slice(0, 35)
+
+  let partyAcc = await tx.account.findFirst({
+    where: {
+      trust_id: trustId,
+      account_type: 'LIABILITY',
+      OR: [
+        { purpose_key: normalizedKey },
+        { name: { equals: `${cleanName} (Party)`, mode: 'insensitive' } },
+        { name: { equals: cleanName, mode: 'insensitive' } },
+      ],
+    },
+  })
+  if (partyAcc) return partyAcc
+
+  // Allocate next available code in 21xx range (2101, 2102, ...)
+  const existingAccounts = await tx.account.findMany({
+    where: { trust_id: trustId, account_type: 'LIABILITY' },
+    select: { code: true },
+  })
+  const usedCodes = new Set(existingAccounts.map((a) => parseInt(a.code, 10)).filter((n) => !Number.isNaN(n)))
+  let nextCodeNum = 2101
+  while (usedCodes.has(nextCodeNum) && nextCodeNum < 2999) {
+    nextCodeNum++
+  }
+
+  partyAcc = await tx.account.create({
+    data: {
+      trust_id: trustId,
+      code: String(nextCodeNum),
+      name: `${cleanName} (Party)`,
+      account_type: 'LIABILITY',
+      normal_balance: 'CREDIT',
+      is_system: false,
+      purpose_key: normalizedKey,
+      description: `Party / Vendor account for ${cleanName}`,
+    },
+  })
+
+  return partyAcc
+}
+
+/**
  * Generates an auto-incrementing journal voucher number.
  */
 async function generateJournalEntryNumber(trustId, voucherType, entryDate, tx = prismaClient) {
@@ -457,17 +512,40 @@ async function postExpenseJournal(expense, createdBy = 'SYSTEM', tx = prismaClie
   }
 
   const amt = Number(expense.amount)
-  const narration = `Expense voucher ${expense.voucher_number || ''}: ${expense.description || ''}${expense.paid_to ? ' (Paid to ' + expense.paid_to + ')' : ''}`
+  const partyName = expense.paid_to ? expense.paid_to.trim() : null
+  const narration = `Expense voucher ${expense.voucher_number || ''}: ${expense.description || ''}${partyName ? ' (Paid to ' + partyName + ')' : ''}`
 
-  return createJournalEntry({
-    trustId: expense.trust_id,
-    entryDate: expense.expense_date || new Date(),
-    voucherType: 'PAYMENT',
-    narration,
-    sourceType: 'EXPENSE',
-    sourceId: expense.id,
-    createdBy,
-    lines: [
+  let lines = []
+  if (partyName) {
+    const partyAccount = await ensurePartyAccount(expense.trust_id, partyName, tx)
+    lines = [
+      {
+        account_id: debitAccount.id,
+        debit: amt,
+        credit: 0,
+        narration: expense.description || 'Expense booked',
+      },
+      {
+        account_id: partyAccount.id,
+        debit: 0,
+        credit: amt,
+        narration: `Payable to ${partyName}: ${expense.description || 'Expense'}`,
+      },
+      {
+        account_id: partyAccount.id,
+        debit: amt,
+        credit: 0,
+        narration: `Paid to ${partyName} via ${expense.payment_mode || 'CASH'}`,
+      },
+      {
+        account_id: creditAccount.id,
+        debit: 0,
+        credit: amt,
+        narration: `Disbursement for ${partyName}`,
+      },
+    ]
+  } else {
+    lines = [
       {
         account_id: debitAccount.id,
         debit: amt,
@@ -480,7 +558,18 @@ async function postExpenseJournal(expense, createdBy = 'SYSTEM', tx = prismaClie
         credit: amt,
         narration: `Paid via ${expense.payment_mode || 'CASH'}`,
       },
-    ],
+    ]
+  }
+
+  return createJournalEntry({
+    trustId: expense.trust_id,
+    entryDate: expense.expense_date || new Date(),
+    voucherType: 'PAYMENT',
+    narration,
+    sourceType: 'EXPENSE',
+    sourceId: expense.id,
+    createdBy,
+    lines,
   }, tx)
 }
 
@@ -1058,6 +1147,7 @@ module.exports = {
   ensureDefaultAccounts,
   ensurePurposeAccount,
   ensureExpenseAccount,
+  ensurePartyAccount,
   generateJournalEntryNumber,
   createJournalEntry,
   postDonationJournal,

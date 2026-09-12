@@ -61,7 +61,7 @@ const VOUCHER_TYPE_COLORS = {
 
 const ACCOUNT_TYPE_LABELS = {
   ASSET: { label: 'Asset (संपत्ति)', color: 'bg-blue-50 text-blue-700 border-blue-200' },
-  LIABILITY: { label: 'Liability (देयता)', color: 'bg-orange-50 text-orange-700 border-orange-200' },
+  LIABILITY: { label: 'Liability & Parties (देयता व पार्टियां)', color: 'bg-orange-50 text-orange-700 border-orange-200' },
   CORPUS: { label: 'Corpus & Reserves (निधि / पूंजी)', color: 'bg-purple-50 text-purple-700 border-purple-200' },
   INCOME: { label: 'Income (आय)', color: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
   EXPENSE: { label: 'Expense (व्यय)', color: 'bg-rose-50 text-rose-700 border-rose-200' },

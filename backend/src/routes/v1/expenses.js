@@ -67,18 +67,34 @@ async function resolveVendorId(trustId, data) {
       where: { id: data.vendor_id, trust_id: trustId },
       select: { id: true },
     })
-    return selected?.id || null
+    if (selected) return selected.id
   }
-  if (!data.paid_to) return null
-  const vendor = await prisma.vendor.findFirst({
+  const name = String(data.paid_to || '').trim()
+  if (!name) return null
+
+  const mobile = data.vendor_mobile ? String(data.vendor_mobile).trim() : null
+  let vendor = await prisma.vendor.findFirst({
     where: {
       trust_id: trustId,
-      is_active: true,
-      name: { equals: data.paid_to.trim(), mode: 'insensitive' },
-      ...(data.vendor_mobile ? { mobile: data.vendor_mobile } : {}),
+      name: { equals: name, mode: 'insensitive' },
+      ...(mobile ? { mobile } : {}),
     },
     select: { id: true },
   })
+
+  if (!vendor) {
+    vendor = await prisma.vendor.create({
+      data: {
+        trust_id: trustId,
+        name,
+        mobile: mobile || null,
+        category: data.category || 'GENERAL',
+        notes: 'Auto-created from expense voucher',
+      },
+      select: { id: true },
+    }).catch(() => null)
+  }
+
   return vendor?.id || null
 }
 
