@@ -6,6 +6,8 @@ const { createAuditLog } = require('../../services/audit.service')
 const { getAuditContext } = require('../../utils/auditContext')
 const { trustSlugUpdateSchema, validate } = require('../../utils/validators')
 const { buildTrustLoginUrl } = require('../../utils/tenantHost')
+const logger = require('../../utils/logger')
+const { postOpeningBalances } = require('../../services/accounting.service')
 
 const settingsSchema = z.object({
   name: z.string().min(2).max(200).optional(),
@@ -315,6 +317,14 @@ router.put('/', async (req, res, next) => {
         where: { trust_id: req.trustId, code: 'LIFETIME' },
         data: { is_active: false },
       })
+    }
+
+    if (opening_cash_balance !== undefined || opening_bank_balance !== undefined || current_fy !== undefined) {
+      try {
+        await postOpeningBalances(req.trustId, refreshed.current_fy, req.user?.username || 'ADMIN')
+      } catch (accErr) {
+        logger.error('Failed to sync opening balance journal on settings update', { error: accErr.message })
+      }
     }
 
     return res.json({

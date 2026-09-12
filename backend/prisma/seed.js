@@ -2,6 +2,7 @@ require('dotenv').config()
 
 const { PrismaClient } = require('@prisma/client')
 const bcrypt = require('bcryptjs')
+const { ensureDefaultAccounts } = require('../src/services/accounting.service')
 const prisma = new PrismaClient()
 
 async function main() {
@@ -94,6 +95,9 @@ async function main() {
     },
   })
   console.log('Initial trustee seeded')
+
+  await ensureDefaultAccounts(trust.id, prisma)
+  console.log('Default Chart of Accounts seeded')
 
   console.log('\nDatabase seeded successfully!')
   console.log('----------------------------------------')

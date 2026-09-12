@@ -961,6 +961,22 @@ router.put('/:id', async (req, res, next) => {
       metadata: { amount: updated.amount, donor: updated.donor_name },
     })
 
+    try {
+      const financialChanged =
+        Number(existing.amount) !== Number(updated.amount) ||
+        existing.payment_mode !== updated.payment_mode ||
+        existing.purpose !== updated.purpose ||
+        Boolean(existing.is_corpus) !== Boolean(updated.is_corpus) ||
+        new Date(existing.donation_date).toISOString().slice(0, 10) !== new Date(updated.donation_date).toISOString().slice(0, 10)
+
+      if (financialChanged) {
+        await reverseDonationJournal(existing, req.user?.username || 'ADMIN')
+        await postDonationJournal(updated, req.user?.username || 'ADMIN')
+      }
+    } catch (accErr) {
+      logger.error('Failed to update donation journal', { error: accErr.message, donationId: updated.id })
+    }
+
     res.json({
       success: true,
       message: 'Donation updated successfully',

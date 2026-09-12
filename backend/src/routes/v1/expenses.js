@@ -709,6 +709,22 @@ router.put('/:id', async (req, res, next) => {
       metadata: { amount: expense.amount, category: expense.category },
     })
 
+    try {
+      const financialChanged =
+        Number(existing.amount) !== Number(expense.amount) ||
+        existing.category !== expense.category ||
+        existing.payment_mode !== expense.payment_mode ||
+        existing.payment_channel !== expense.payment_channel ||
+        new Date(existing.expense_date).toISOString().slice(0, 10) !== new Date(expense.expense_date).toISOString().slice(0, 10)
+
+      if (financialChanged) {
+        await reverseExpenseJournal(existing, req.user?.username || 'ADMIN')
+        await postExpenseJournal(expense, req.user?.username || 'ADMIN')
+      }
+    } catch (accErr) {
+      logger.error('Failed to update expense journal', { error: accErr.message, expenseId: expense.id })
+    }
+
     res.json({
       success: true,
       message: 'Expense updated successfully',

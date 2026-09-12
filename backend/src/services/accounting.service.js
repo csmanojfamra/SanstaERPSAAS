@@ -555,11 +555,28 @@ async function postOpeningBalances(trustId, fy, createdBy = 'SYSTEM', tx = prism
       is_reversed: false,
     },
   })
-  if (existing) return existing
-
   const cashBal = Number(trust.opening_cash_balance) || 0
   const bankBal = Number(trust.opening_bank_balance) || 0
   const totalOpening = cashBal + bankBal
+
+  if (existing) {
+    const currentLines = await tx.journalLine.findMany({
+      where: { journal_entry_id: existing.id },
+      include: { account: true },
+    })
+    const existingCash = Number(currentLines.find((l) => l.account?.code === '1001')?.debit || 0)
+    const existingBank = Number(currentLines.find((l) => l.account?.code === '1002')?.debit || 0)
+
+    if (existingCash === cashBal && existingBank === bankBal) {
+      return existing
+    }
+
+    await tx.journalEntry.update({
+      where: { id: existing.id },
+      data: { is_reversed: true },
+    })
+  }
+
   if (totalOpening <= 0) return null
 
   const cashAcc = await tx.account.findUnique({ where: { trust_id_code: { trust_id: trustId, code: '1001' } } })
