@@ -8,6 +8,8 @@ const { generateReceiptNumber } = require('../../services/receiptNumber.service'
 const { generateReceiptBuffer } = require('../../services/receipt.service')
 const { saveReceiptPDF } = require('../../services/storage.service')
 const { postDonationJournal } = require('../../services/accounting.service')
+const { dispatchReceiptWhatsApp } = require('../../services/receiptWhatsapp.service')
+const logger = require('../../utils/logger')
 
 const LIFETIME_CODE = 'LIFETIME'
 
@@ -363,6 +365,7 @@ router.post('/members/:id/payments', async (req, res, next) => {
       return { donation, installment, completed }
     })
 
+    let whatsapp = { sent: false, reason: 'receipt_missing' }
     try {
       const pdfBuffer = await generateReceiptBuffer(result.donation, req.trust)
       const { url } = saveReceiptPDF(result.donation.receipt_number, pdfBuffer)
@@ -370,8 +373,13 @@ router.post('/members/:id/payments', async (req, res, next) => {
         where: { id: result.donation.id, trust_id: req.trustId },
         data: { receipt_pdf_path: url, receipt_sent_at: new Date() },
       })
-    } catch {
-      // Receipt PDF failure should not roll back payment
+      whatsapp = await dispatchReceiptWhatsApp(
+        { ...result.donation, receipt_pdf_path: url },
+        req.trust,
+        { audit: { ...getAuditContext(req), module: 'MEMBERSHIP' } }
+      )
+    } catch (err) {
+      logger.error('Membership receipt WhatsApp failed', { error: err.message })
     }
 
     try {
@@ -400,6 +408,7 @@ router.post('/members/:id/payments', async (req, res, next) => {
       donation: result.donation,
       installment: result.installment,
       member: memberSummary(refreshed, refreshed.plan),
+      whatsapp,
     })
   } catch (err) {
     next(err)

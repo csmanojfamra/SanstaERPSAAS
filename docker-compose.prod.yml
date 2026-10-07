@@ -49,6 +49,10 @@ services:
       - TENANT_URL_PROTOCOL=${TENANT_URL_PROTOCOL:-https}
       - ADMIN_PATH=${ADMIN_PATH:-/admin/login}
       - SEED_DATABASE=${SEED_DATABASE:-false}
+      - WHATOMATE_BASE_URL=${WHATOMATE_BASE_URL:-https://wa.fastlegal.in}
+      - WHATOMATE_API_KEY=${WHATOMATE_API_KEY:-}
+      - WHATOMATE_ACCOUNT_NAME=${WHATOMATE_ACCOUNT_NAME:-fastlegal}
+      - WHATOMATE_RECEIPT_TEMPLATE=${WHATOMATE_RECEIPT_TEMPLATE:-donation_receipt}
     volumes:
       - uploads_data:/app/backend/uploads
     healthcheck:

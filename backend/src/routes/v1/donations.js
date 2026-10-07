@@ -6,7 +6,7 @@ const prisma = require('../../lib/prisma')
 const { generateReceiptNumber } = require('../../services/receiptNumber.service')
 const { generateReceiptBuffer, fontsAvailable } = require('../../services/receipt.service')
 const { saveReceiptPDF, receiptExists, getReceiptFilePath } = require('../../services/storage.service')
-const { sendReceiptWhatsApp } = require('../../services/whatsapp.service')
+const { dispatchReceiptWhatsApp } = require('../../services/receiptWhatsapp.service')
 const {
   donationSchema,
   validate,
@@ -222,7 +222,7 @@ router.post('/', async (req, res, next) => {
       })
     }
 
-    await generateAndUploadReceipt(donation, req.trust)
+    const receiptPath = await generateAndUploadReceipt(donation, req.trust)
 
     try {
       await postDonationJournal(donation, req.user?.username || 'OPERATOR')
@@ -230,10 +230,28 @@ router.post('/', async (req, res, next) => {
       logger.error('Failed to post donation journal', { error: accErr.message, donationId: donation.id })
     }
 
+    let whatsapp = { sent: false, reason: receiptPath ? 'not_sent' : 'receipt_missing' }
+    if (receiptPath) {
+      try {
+        whatsapp = await dispatchReceiptWhatsApp(
+          { ...donation, receipt_pdf_path: receiptPath },
+          req.trust,
+          { audit: getAuditContext(req) }
+        )
+      } catch (waErr) {
+        logger.error('WhatsApp receipt dispatch failed', {
+          error: waErr.message,
+          donationId: donation.id,
+        })
+        whatsapp = { sent: false, reason: waErr.message }
+      }
+    }
+
     res.status(201).json({
       success: true,
       message: 'Donation recorded successfully',
       donation,
+      whatsapp,
     })
   } catch (err) {
     next(err)
@@ -630,9 +648,11 @@ router.post('/:id/send-whatsapp', async (req, res, next) => {
       })
     }
 
-    const fullUrl = `${process.env.PUBLIC_URL || ''}${receiptPath}`
-
-    const result = await sendReceiptWhatsApp(donation, req.trust, fullUrl)
+    const result = await dispatchReceiptWhatsApp(
+      { ...donation, receipt_pdf_path: receiptPath },
+      req.trust,
+      { audit: getAuditContext(req) }
+    )
 
     if (!result.sent && result.reason === 'not_configured') {
       return res.json({
@@ -642,43 +662,11 @@ router.post('/:id/send-whatsapp', async (req, res, next) => {
     }
 
     if (!result.sent) {
-      await createNotification({
-        trust_id: req.trustId,
-        type: 'RECEIPT',
-        title: 'WhatsApp Send Failed',
-        message: `Failed to send WhatsApp for receipt ${donation.receipt_number}`,
-        priority: 'MEDIUM',
-      })
       return res.status(500).json({
         success: false,
         message: result.reason || 'Failed to send WhatsApp message',
       })
     }
-
-    await prisma.donation.updateMany({
-      where: {
-        id: donation.id,
-        trust_id: req.trustId,
-      },
-      data: {
-        whatsapp_sent: true,
-        whatsapp_sent_at: new Date(),
-      },
-    })
-
-    logger.info('WhatsApp receipt sent', {
-      receipt: donation.receipt_number,
-    })
-
-    await createAuditLog({
-      ...getAuditContext(req),
-      module: 'DONATIONS',
-      action: 'WHATSAPP_SEND',
-      entity_type: 'Donation',
-      entity_id: donation.id,
-      description: `WhatsApp receipt sent for ${donation.receipt_number}`,
-      metadata: { donor_mobile: donation.donor_mobile },
-    })
 
     res.json({
       success: true,

@@ -30,6 +30,13 @@ import { toast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
 import { useQueryClient } from '@tanstack/react-query'
 
+function receiptWhatsAppNote(whatsapp) {
+  if (whatsapp?.sent) return 'Receipt sent on WhatsApp.'
+  if (!whatsapp?.reason || whatsapp.reason === 'receipt_missing') return 'Receipt saved.'
+  if (whatsapp.reason === 'not_configured') return 'Receipt saved. WhatsApp is not configured.'
+  return `Receipt saved. ${whatsapp.reason}`
+}
+
 const MAX_AMOUNT = 99_999_999.99
 const DONOR_TYPE_OPTIONS = [
   { value: 'INDIVIDUAL', label: 'Individual' },
@@ -217,8 +224,8 @@ export default function NewDonation() {
       if (paymentMode !== 'UPI') delete payload.upi_ref
       if (paymentMode !== 'CHEQUE') delete payload.cheque_number
       if (!BANK_TRANSFER_MODES.has(paymentMode)) delete payload.bank_ref
-      await createDonation.mutateAsync(payload)
-      toast({ title: 'Donation recorded', description: 'Receipt will be generated shortly.' })
+      const data = await createDonation.mutateAsync(payload)
+      toast({ title: 'Donation recorded', description: receiptWhatsAppNote(data.whatsapp) })
       navigate('/donations')
     } catch (err) {
       toast({ title: 'Failed to save', description: getApiErrorMessage(err), variant: 'destructive' })
@@ -311,8 +318,8 @@ export default function NewDonation() {
       toast({
         title: 'Membership payment recorded',
         description: data?.donation?.receipt_number
-          ? `Donation receipt ${data.donation.receipt_number}`
-          : 'Balance updated',
+          ? `${data.donation.receipt_number}. ${receiptWhatsAppNote(data.whatsapp)}`
+          : receiptWhatsAppNote(data.whatsapp),
       })
       navigate('/donations')
     } catch (err) {

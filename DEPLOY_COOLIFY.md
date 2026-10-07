@@ -116,6 +116,10 @@ PUBLIC_WEBSITE_URL=https://sanwaliyasethdeoli.in
 TENANT_BASE_DOMAIN=sansthaerp.fastlegal.in
 JWT_SECRET=...
 DB_PASSWORD=...
+WHATOMATE_BASE_URL=https://wa.fastlegal.in
+WHATOMATE_API_KEY=whm_your_api_key
+WHATOMATE_ACCOUNT_NAME=fastlegal
+WHATOMATE_RECEIPT_TEMPLATE=donation_receipt
 ```
 
 If the app shows **no available server**, open **Logs** for the `app` container — usually JWT/DB env missing or container crash.
