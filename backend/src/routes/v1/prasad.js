@@ -3,7 +3,7 @@ const { z } = require('zod')
 const { validate } = require('../../utils/validators')
 const { createAuditLog } = require('../../services/audit.service')
 const { getAuditContext } = require('../../utils/auditContext')
-const { issuePrasadToken, listPrasadTokens } = require('../../services/prasadToken.service')
+const { issuePrasadToken, listPrasadTokens, resendPrasadWhatsApp } = require('../../services/prasadToken.service')
 
 const issueSchema = z.object({
   donor_name: z.string().trim().min(2).max(200),
@@ -14,8 +14,20 @@ const issueSchema = z.object({
 
 router.get('/', async (req, res, next) => {
   try {
-    const tokens = await listPrasadTokens(req.trustId)
-    res.json({ success: true, tokens })
+    const result = await listPrasadTokens(req.trustId, req.query)
+    res.json({ success: true, ...result })
+  } catch (err) {
+    next(err)
+  }
+})
+
+router.post('/:id/whatsapp', async (req, res, next) => {
+  try {
+    const result = await resendPrasadWhatsApp(req, req.params.id)
+    if (!result) {
+      return res.status(404).json({ success: false, message: 'Token not found' })
+    }
+    res.json({ success: true, ...result })
   } catch (err) {
     next(err)
   }

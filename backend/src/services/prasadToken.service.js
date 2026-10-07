@@ -2,7 +2,7 @@ const crypto = require('crypto')
 const QRCode = require('qrcode')
 const prisma = require('../lib/prisma')
 const { resolveWhatsAppConfig } = require('./whatsappConfig.service')
-const { sendNoticeWhatsApp } = require('./whatsapp.service')
+const { sendPrasadWhatsApp } = require('./whatsapp.service')
 const { upsertDonor } = require('./donor.service')
 const { publicOrigin } = require('../utils/publicUrl')
 
@@ -75,19 +75,32 @@ async function issuePrasadToken(req, input) {
   }
 
   const publicUrl = `${publicBase(req)}/p/${code}`
-  const qrDataUrl = await QRCode.toDataURL(publicUrl, {
-    margin: 1,
-    width: 320,
+  const qrPng = await QRCode.toBuffer(publicUrl, {
+    type: 'png',
+    margin: 2,
+    width: 512,
     errorCorrectionLevel: 'M',
   })
+  const qrDataUrl = `data:image/png;base64,${qrPng.toString('base64')}`
+  const whatsapp = await deliverTokenWhatsApp(req, token, publicUrl, qrPng)
 
+  return {
+    token: presentToken(token, { public_url: publicUrl, qr_data_url: qrDataUrl }),
+    whatsapp,
+  }
+}
+
+async function deliverTokenWhatsApp(req, token, publicUrl, qrPng) {
   let whatsapp = { sent: false, reason: 'not_sent' }
   try {
     const config = await resolveWhatsAppConfig(req.trust)
-    whatsapp = await sendNoticeWhatsApp({
+    whatsapp = await sendPrasadWhatsApp({
       mobile: token.donor_mobile,
       name: token.donor_name,
-      body: tokenMessage(req.trust, token, publicUrl),
+      caption: tokenMessage(req.trust, token, publicUrl),
+      image: qrPng,
+      amount: `Rs ${Number(token.amount).toLocaleString('en-IN')}`,
+      packets: token.packets,
       config,
     })
     if (whatsapp.sent) {
@@ -100,20 +113,79 @@ async function issuePrasadToken(req, input) {
   } catch (err) {
     whatsapp = { sent: false, reason: err.message || 'Failed to send WhatsApp' }
   }
-
-  return {
-    token: presentToken(token, { public_url: publicUrl, qr_data_url: qrDataUrl }),
-    whatsapp,
-  }
+  return whatsapp
 }
 
-async function listPrasadTokens(trustId) {
-  const rows = await prisma.prasadToken.findMany({
-    where: { trust_id: trustId },
-    orderBy: { created_at: 'desc' },
-    take: 40,
+async function resendPrasadWhatsApp(req, id) {
+  const token = await prisma.prasadToken.findFirst({
+    where: { id, trust_id: req.trustId },
   })
-  return rows.map((row) => presentToken(row))
+  if (!token) return null
+  const publicUrl = `${publicBase(req)}/p/${token.code}`
+  const qrPng = await QRCode.toBuffer(publicUrl, {
+    type: 'png',
+    margin: 2,
+    width: 512,
+    errorCorrectionLevel: 'M',
+  })
+  const whatsapp = await deliverTokenWhatsApp(req, token, publicUrl, qrPng)
+  return { token: presentToken(token), whatsapp }
+}
+
+function istBound(day, end) {
+  if (!day) return null
+  return new Date(`${day}T${end ? '23:59:59.999' : '00:00:00'}+05:30`)
+}
+
+async function listPrasadTokens(trustId, query = {}) {
+  const q = String(query.q || '').trim()
+  const digits = q.replace(/\D/g, '')
+  const page = Math.max(1, Number(query.page) || 1)
+  const limit = Math.min(200, Math.max(1, Number(query.limit) || 50))
+  const where = { trust_id: trustId }
+  if (query.status === 'ISSUED' || query.status === 'REDEEMED') where.status = query.status
+  const from = istBound(query.from, false)
+  const to = istBound(query.to, true)
+  if (from || to) {
+    where.created_at = {}
+    if (from) where.created_at.gte = from
+    if (to) where.created_at.lte = to
+  }
+  if (q) {
+    where.OR = [
+      { donor_name: { contains: q, mode: 'insensitive' } },
+      ...(digits ? [{ donor_mobile: { contains: digits } }] : []),
+    ]
+  }
+
+  const [rows, total, sums, redeemed] = await Promise.all([
+    prisma.prasadToken.findMany({
+      where,
+      orderBy: { created_at: 'desc' },
+      skip: (page - 1) * limit,
+      take: limit,
+    }),
+    prisma.prasadToken.count({ where }),
+    prisma.prasadToken.aggregate({
+      where,
+      _sum: { amount: true, packets: true },
+    }),
+    prisma.prasadToken.count({ where: { ...where, status: 'REDEEMED' } }),
+  ])
+
+  return {
+    tokens: rows.map((row) => presentToken(row)),
+    page,
+    limit,
+    total,
+    summary: {
+      count: total,
+      amount: Number(sums._sum.amount || 0),
+      packets: Number(sums._sum.packets || 0),
+      redeemed,
+      open: total - redeemed,
+    },
+  }
 }
 
 async function findTokenByCode(code) {
@@ -134,6 +206,7 @@ async function redeemPrasadToken(code) {
 module.exports = {
   packetCount,
   issuePrasadToken,
+  resendPrasadWhatsApp,
   listPrasadTokens,
   findTokenByCode,
   redeemPrasadToken,

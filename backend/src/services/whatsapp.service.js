@@ -262,7 +262,56 @@ async function sendReceiptWhatsApp(donation, trust, { receiptUrl, filePath, conf
   return { sent: false, reason: message || 'Failed to send WhatsApp message' }
 }
 
-async function sendNoticeWhatsApp({ mobile, name, body, config }) {
+async function sendImage(config, contactId, image, caption) {
+  const form = new FormData()
+  form.append('contact_id', contactId)
+  form.append('type', 'image')
+  form.append('caption', String(caption || '').slice(0, 1024))
+  form.append('whatsapp_account', config.accountName)
+  form.append('file', new Blob([image], { type: 'image/png' }), 'prasad-token.png')
+  const data = await whatomate(config, 'POST', '/api/messages/media', { form })
+  const message = data?.data || {}
+  if (message.status === 'failed') {
+    throw new Error(message.error_message || 'WhatsApp image was not accepted')
+  }
+  return {
+    sent: true,
+    sid: message.id || message.wamid || null,
+    provider: 'whatomate',
+    channel: 'image',
+  }
+}
+
+async function sendPrasadTemplate(config, phone, image, params) {
+  const templateName = (process.env.WHATOMATE_PRASAD_TEMPLATE || 'prasad_token').trim()
+  const form = new FormData()
+  form.append('phone_number', phone)
+  form.append('template_name', templateName)
+  form.append('account_name', config.accountName)
+  form.append('template_params', JSON.stringify({
+    1: String(params.name || 'Devotee').slice(0, 80),
+    2: String(params.amount || '').slice(0, 40),
+    3: String(params.packets || '').slice(0, 20),
+  }))
+  form.append('header_media_filename', 'prasad-token.png')
+  form.append('header_file', new Blob([image], { type: 'image/png' }), 'prasad-token.png')
+  const data = await whatomate(config, 'POST', '/api/messages/template', { form })
+  const payload = data?.data || {}
+  if (payload.status === 'failed') {
+    throw new Error(payload.error_message || 'WhatsApp template was not accepted')
+  }
+  return {
+    sent: true,
+    sid: payload.message_id || payload.id || null,
+    provider: 'whatomate',
+    channel: 'template',
+  }
+}
+
+const PRASAD_PENDING_REASON =
+  'Prasad QR template is pending Meta approval. WhatsApp will send the QR after it is approved. The printed slip still works.'
+
+async function sendPrasadWhatsApp({ mobile, name, caption, image, amount, packets, config }) {
   if (config && config.enabled === false) {
     return { sent: false, reason: 'whatsapp_disabled' }
   }
@@ -273,15 +322,34 @@ async function sendNoticeWhatsApp({ mobile, name, body, config }) {
   if (!phone) {
     return { sent: false, reason: 'invalid_mobile' }
   }
+
+  let templateError = null
+  try {
+    return await sendPrasadTemplate(config, phone, image, { name, amount, packets })
+  } catch (err) {
+    templateError = err
+    console.error('Prasad WhatsApp template failed:', err.message)
+  }
+
   try {
     const contact = await findOrCreateContact(config, phone, name)
-    if (!contact?.id) {
-      return { sent: false, reason: 'Could not open a WhatsApp chat for this number' }
+    if (contact?.id && contact.service_window_open === true) {
+      return await sendImage(config, contact.id, image, caption)
     }
-    return await sendText(config, contact.id, body)
   } catch (err) {
-    return { sent: false, reason: err.message || 'Failed to send WhatsApp message' }
+    console.error('Prasad WhatsApp image failed:', err.message)
+    if (!templateError) templateError = err
   }
+
+  const message = templateError?.message || ''
+  if (/not approved/i.test(message)) return { sent: false, reason: PRASAD_PENDING_REASON }
+  if (/24 hours/i.test(message)) {
+    return {
+      sent: false,
+      reason: 'WhatsApp can send this QR after the prasad template is approved, or within 24 hours of the person messaging this number. The printed slip still works.',
+    }
+  }
+  return { sent: false, reason: message || 'Failed to send WhatsApp QR' }
 }
 
-module.exports = { sendReceiptWhatsApp, sendNoticeWhatsApp }
+module.exports = { sendReceiptWhatsApp, sendPrasadWhatsApp }

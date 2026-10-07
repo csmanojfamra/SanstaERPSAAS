@@ -8,6 +8,18 @@ import api, { getApiErrorMessage } from '@/lib/api'
 import { toast } from '@/hooks/use-toast'
 import { useAuthStore } from '@/store/useAuthStore'
 import { formatCurrency } from '@/utils/formatters'
+
+function formatWhen(value) {
+  if (!value) return '—'
+  return new Date(value).toLocaleString('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
 import DonorSuggest from '@/components/donors/DonorSuggest'
 
 function packetPreview(amount, rate) {
@@ -19,7 +31,7 @@ function packetPreview(amount, rate) {
 
 function whatsappNote(whatsapp) {
   if (!whatsapp) return ''
-  if (whatsapp.sent) return 'The token link was sent on WhatsApp.'
+  if (whatsapp.sent) return 'The QR was sent on WhatsApp.'
   if (whatsapp.reason === 'not_configured' || whatsapp.reason === 'whatsapp_disabled') {
     return 'WhatsApp is not connected. The printed slip still works.'
   }
@@ -36,12 +48,17 @@ export default function PrasadTokens() {
     rupees_per_packet: '100',
   })
   const [slip, setSlip] = useState(null)
+  const [filters, setFilters] = useState({ q: '', from: '', to: '', status: '' })
+  const [page, setPage] = useState(1)
+  const [sendingId, setSendingId] = useState('')
 
   const tokensQuery = useQuery({
-    queryKey: ['prasad-tokens'],
+    queryKey: ['prasad-tokens', filters, page],
     queryFn: async () => {
-      const { data } = await api.get('/prasad-tokens')
-      return data.tokens || []
+      const { data } = await api.get('/prasad-tokens', {
+        params: { ...filters, page, limit: 50 },
+      })
+      return data
     },
   })
 
@@ -66,6 +83,33 @@ export default function PrasadTokens() {
 
   const packets = packetPreview(form.amount, form.rupees_per_packet)
   const trustName = trust?.name_hindi || trust?.name || 'Mandir'
+
+  const tokens = tokensQuery.data?.tokens || []
+  const summary = tokensQuery.data?.summary
+  const total = tokensQuery.data?.total || 0
+  const pageCount = Math.max(1, Math.ceil(total / 50))
+
+  function updateFilter(key, value) {
+    setPage(1)
+    setFilters((prev) => ({ ...prev, [key]: value }))
+  }
+
+  async function sendQr(token) {
+    setSendingId(token.id)
+    try {
+      const { data } = await api.post(`/prasad-tokens/${token.id}/whatsapp`)
+      qc.invalidateQueries({ queryKey: ['prasad-tokens'] })
+      toast({
+        title: data.whatsapp?.sent ? 'QR sent on WhatsApp' : 'QR was not sent',
+        description: whatsappNote(data.whatsapp),
+        variant: data.whatsapp?.sent ? 'default' : 'destructive',
+      })
+    } catch (err) {
+      toast({ title: 'Could not send QR', description: getApiErrorMessage(err), variant: 'destructive' })
+    } finally {
+      setSendingId('')
+    }
+  }
 
   function onSubmit(event) {
     event.preventDefault()
@@ -188,43 +232,98 @@ export default function PrasadTokens() {
 
       <Card className="mt-4 print:hidden">
         <CardContent className="pt-6">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-semibold">Recent tokens</h2>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 className="text-sm font-semibold">Token register</h2>
+              <p className="text-xs text-muted-foreground">Search a name or mobile to see every token that person has taken.</p>
+            </div>
             <Button type="button" variant="outline" size="sm" onClick={() => tokensQuery.refetch()}>
               Refresh
             </Button>
           </div>
+          <div className="mb-3 grid gap-2 sm:grid-cols-4">
+            <Input
+              placeholder="Name or mobile"
+              value={filters.q}
+              onChange={(e) => updateFilter('q', e.target.value)}
+            />
+            <Input type="date" aria-label="From date" value={filters.from} onChange={(e) => updateFilter('from', e.target.value)} />
+            <Input type="date" aria-label="To date" value={filters.to} onChange={(e) => updateFilter('to', e.target.value)} />
+            <select
+              className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+              value={filters.status}
+              onChange={(e) => updateFilter('status', e.target.value)}
+            >
+              <option value="">All statuses</option>
+              <option value="ISSUED">Open</option>
+              <option value="REDEEMED">Used</option>
+            </select>
+          </div>
+          {summary ? (
+            <p className="mb-3 text-sm text-muted-foreground">
+              {summary.count} tokens · {formatCurrency(summary.amount)} · {summary.packets} packets · {summary.redeemed} used · {summary.open} open
+            </p>
+          ) : null}
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead>
                 <tr className="border-b text-muted-foreground">
+                  <th className="py-2 pr-3 font-medium">When</th>
                   <th className="py-2 pr-3 font-medium">Name</th>
                   <th className="py-2 pr-3 font-medium">Mobile</th>
                   <th className="py-2 pr-3 font-medium">Amount</th>
                   <th className="py-2 pr-3 font-medium">Packets</th>
-                  <th className="py-2 font-medium">Status</th>
+                  <th className="py-2 pr-3 font-medium">Status</th>
+                  <th className="py-2 pr-3 font-medium">WhatsApp</th>
+                  <th className="py-2 font-medium" />
                 </tr>
               </thead>
               <tbody>
-                {(tokensQuery.data || []).map((token) => (
+                {tokens.map((token) => (
                   <tr key={token.id} className="border-b">
+                    <td className="whitespace-nowrap py-2 pr-3">{formatWhen(token.created_at)}</td>
                     <td className="py-2 pr-3">{token.donor_name}</td>
                     <td className="py-2 pr-3">{token.donor_mobile}</td>
                     <td className="py-2 pr-3">{formatCurrency(token.amount)}</td>
                     <td className="py-2 pr-3">{token.packets}</td>
-                    <td className="py-2">{token.status === 'REDEEMED' ? 'Used' : 'Open'}</td>
+                    <td className="py-2 pr-3">{token.status === 'REDEEMED' ? 'Used' : 'Open'}</td>
+                    <td className="py-2 pr-3">{token.whatsapp_sent ? 'Sent' : 'Not sent'}</td>
+                    <td className="py-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={sendingId === token.id}
+                        onClick={() => sendQr(token)}
+                      >
+                        {sendingId === token.id ? 'Sending...' : 'Send QR'}
+                      </Button>
+                    </td>
                   </tr>
                 ))}
-                {!tokensQuery.isLoading && (tokensQuery.data || []).length === 0 ? (
+                {!tokensQuery.isLoading && tokens.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="py-4 text-muted-foreground">
-                      No tokens yet.
+                    <td colSpan={8} className="py-4 text-muted-foreground">
+                      No tokens for this search.
                     </td>
                   </tr>
                 ) : null}
               </tbody>
             </table>
           </div>
+          {pageCount > 1 ? (
+            <div className="mt-3 flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">Page {page} of {pageCount}</span>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+                  Previous
+                </Button>
+                <Button type="button" variant="outline" size="sm" disabled={page >= pageCount} onClick={() => setPage((p) => p + 1)}>
+                  Next
+                </Button>
+              </div>
+            </div>
+          ) : null}
         </CardContent>
       </Card>
     </div>
