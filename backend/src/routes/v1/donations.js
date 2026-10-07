@@ -18,6 +18,7 @@ const { createAuditLog } = require('../../services/audit.service')
 const { createNotification } = require('../../services/notification.service')
 const { getAuditContext } = require('../../utils/auditContext')
 const { postDonationJournal, reverseDonationJournal } = require('../../services/accounting.service')
+const { upsertDonor } = require('../../services/donor.service')
 
 function donationAmount(d) {
   return Number(d.amount) || 0
@@ -189,6 +190,12 @@ router.post('/', async (req, res, next) => {
         },
       })
     })
+
+    try {
+      await upsertDonor(req.trustId, data)
+    } catch (donorErr) {
+      logger.error('Donor save failed', { error: donorErr.message, donationId: donation.id })
+    }
 
     logger.info('Donation created', {
       receipt: donation.receipt_number,

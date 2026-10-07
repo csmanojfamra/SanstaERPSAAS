@@ -56,6 +56,7 @@ app.use(
 app.use(morgan(process.env.NODE_ENV === 'development' ? 'dev' : 'combined'))
 
 app.use(express.json({ limit: '10mb' }))
+app.use(express.urlencoded({ extended: false }))
 app.use('/api', apiLimiter)
 
 // Serve uploaded PDFs
@@ -63,6 +64,9 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')))
 
 // API routes
 app.use('/api/v1', require('./src/routes/v1/index'))
+
+// Public one-time prasad token page. A phone camera opens this from the QR.
+require('./src/routes/prasadPublic').mountPrasadPublic(app)
 
 // Health check
 app.get('/api/v1/health', (req, res) => {

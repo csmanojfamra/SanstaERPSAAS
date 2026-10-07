@@ -2,6 +2,7 @@ const fs = require('fs')
 const prisma = require('../lib/prisma')
 const logger = require('../utils/logger')
 const { sendReceiptWhatsApp } = require('./whatsapp.service')
+const { resolveWhatsAppConfig } = require('./whatsappConfig.service')
 const { getReceiptFilePath } = require('./storage.service')
 const { createNotification } = require('./notification.service')
 const { createAuditLog } = require('./audit.service')
@@ -11,9 +12,11 @@ async function dispatchReceiptWhatsApp(donation, trust, { audit } = {}) {
   const receiptPath = donation.receipt_pdf_path || publicPath
   const fullUrl = `${process.env.PUBLIC_URL || ''}${receiptPath.startsWith('/') ? receiptPath : `/${receiptPath}`}`
 
+  const config = await resolveWhatsAppConfig(trust)
   const result = await sendReceiptWhatsApp(donation, trust, {
     receiptUrl: fullUrl,
     filePath: fs.existsSync(filepath) ? filepath : null,
+    config,
   })
 
   if (result.sent) {
@@ -48,7 +51,7 @@ async function dispatchReceiptWhatsApp(donation, trust, { audit } = {}) {
     reason: result.reason,
   })
 
-  if (result.reason && result.reason !== 'not_configured') {
+  if (result.reason && result.reason !== 'not_configured' && result.reason !== 'whatsapp_disabled') {
     await createNotification({
       trust_id: trust.id,
       type: 'RECEIPT',

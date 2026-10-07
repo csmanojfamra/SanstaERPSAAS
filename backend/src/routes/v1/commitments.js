@@ -9,6 +9,7 @@ const { generateReceiptBuffer } = require('../../services/receipt.service')
 const { saveReceiptPDF } = require('../../services/storage.service')
 const { postDonationJournal } = require('../../services/accounting.service')
 const { dispatchReceiptWhatsApp } = require('../../services/receiptWhatsapp.service')
+const { upsertDonor } = require('../../services/donor.service')
 const logger = require('../../utils/logger')
 
 const LIFETIME_CODE = 'LIFETIME'
@@ -364,6 +365,16 @@ router.post('/members/:id/payments', async (req, res, next) => {
 
       return { donation, installment, completed }
     })
+
+    try {
+      await upsertDonor(req.trustId, {
+        name: member.name,
+        mobile: member.mobile,
+        city: member.city,
+      })
+    } catch (donorErr) {
+      logger.error('Donor save failed', { error: donorErr.message })
+    }
 
     let whatsapp = { sent: false, reason: 'receipt_missing' }
     try {

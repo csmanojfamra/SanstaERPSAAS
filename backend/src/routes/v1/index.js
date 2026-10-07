@@ -12,6 +12,8 @@ const platformOnly = [authMiddleware, requirePlatformAdmin]
 router.use('/auth', require('./auth'))
 router.use('/platform', platformOnly, require('./platform'))
 router.use('/donations', protect, require('./donations'))
+router.use('/donors', protect, require('./donors'))
+router.use('/prasad-tokens', protect, require('./prasad'))
 router.use('/trustees', protect, require('./trustees'))
 router.use('/expenses', protect, require('./expenses'))
 router.use('/inkind', protect, require('./inkind'))

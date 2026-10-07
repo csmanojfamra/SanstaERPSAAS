@@ -23,6 +23,7 @@ import InKindLinesEditor, {
   mapInKindLinesForApi,
 } from '@/components/inkind/InKindLinesEditor'
 import { formatCurrency, formatPaymentMode, todayISO } from '@/utils/formatters'
+import DonorSuggest from '@/components/donors/DonorSuggest'
 import api, { getApiErrorMessage } from '@/lib/api'
 import { validateDonationPaymentRefs, confirmBackdatedEntry } from '@/lib/formHelpers'
 import RequiredLabel from '@/components/common/RequiredLabel'
@@ -34,6 +35,7 @@ function receiptWhatsAppNote(whatsapp) {
   if (whatsapp?.sent) return 'Receipt sent on WhatsApp.'
   if (!whatsapp?.reason || whatsapp.reason === 'receipt_missing') return 'Receipt saved.'
   if (whatsapp.reason === 'not_configured') return 'Receipt saved. WhatsApp is not configured.'
+  if (whatsapp.reason === 'whatsapp_disabled') return 'Receipt saved. WhatsApp is off for this trust.'
   return `Receipt saved. ${whatsapp.reason}`
 }
 
@@ -367,7 +369,23 @@ export default function NewDonation() {
             <form onSubmit={handleSubmit(onSubmitCash)} className="grid gap-3.5 sm:grid-cols-2">
               <div className="sm:col-span-2">
                 <RequiredLabel>Donor name</RequiredLabel>
-                <Input {...register('donor_name')} />
+                <DonorSuggest
+                  query={watch('donor_name')}
+                  onPick={(donor) => {
+                    setValue('donor_name', donor.name, { shouldValidate: true })
+                    setValue('donor_mobile', donor.mobile || '', { shouldValidate: true })
+                    if (donor.city) setValue('donor_city', donor.city)
+                    if (donor.email) setValue('donor_email', donor.email)
+                    if (donor.address) setValue('donor_address', donor.address)
+                    if (donor.state) setValue('donor_state', donor.state)
+                    if (donor.pincode) setValue('donor_pincode', donor.pincode)
+                    if (donor.donor_type) setValue('donor_type', donor.donor_type)
+                    if (donor.pan_number) setValue('pan_number', donor.pan_number)
+                    if (donor.address || donor.email || donor.pan_number) setShowOptionalDetails(true)
+                  }}
+                >
+                  <Input {...register('donor_name')} autoComplete="off" />
+                </DonorSuggest>
                 {errors.donor_name && <p className="text-sm text-destructive">{errors.donor_name.message}</p>}
               </div>
               <div>
@@ -533,11 +551,24 @@ export default function NewDonation() {
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="sm:col-span-2">
                   <RequiredLabel>Donor name</RequiredLabel>
-                  <Input
-                    value={inkindForm.donor_name}
-                    onChange={(e) => setInkindForm({ ...inkindForm, donor_name: e.target.value })}
-                    required
-                  />
+                  <DonorSuggest
+                    query={inkindForm.donor_name}
+                    onPick={(donor) =>
+                      setInkindForm((prev) => ({
+                        ...prev,
+                        donor_name: donor.name,
+                        donor_mobile: donor.mobile || prev.donor_mobile,
+                        donor_city: donor.city || prev.donor_city,
+                      }))
+                    }
+                  >
+                    <Input
+                      value={inkindForm.donor_name}
+                      autoComplete="off"
+                      onChange={(e) => setInkindForm({ ...inkindForm, donor_name: e.target.value })}
+                      required
+                    />
+                  </DonorSuggest>
                 </div>
                 <div>
                   <Label>Mobile</Label>

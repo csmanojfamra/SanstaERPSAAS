@@ -34,9 +34,12 @@ model Trust {
   reg_number       String?
   razorpay_key     String?
   settings_json    Json?
-  primary_color    String   @default("#FF6B00")
-  secondary_color  String   @default("#7B1C1C")
-  created_at       DateTime @default(now())
+  primary_color      String   @default("#FF6B00")
+  secondary_color    String   @default("#7B1C1C")
+  whatsapp_enabled   Boolean  @default(true)
+  whatsapp_account   String?
+  whatsapp_template  String?
+  created_at         DateTime @default(now())
   updated_at       DateTime @updatedAt
 
   users               User[]
@@ -54,6 +57,8 @@ model Trust {
   commitment_members  CommitmentMember[]
   accounts            Account[]
   journal_entries     JournalEntry[]
+  donors              Donor[]
+  prasad_tokens       PrasadToken[]
 }
 
 model User {
@@ -81,6 +86,55 @@ model User {
 enum Role {
   ADMIN
   OPERATOR
+}
+
+// One row for the Fastlegal Whatomate connection. Per-trust numbers live on Trust.
+model PlatformWhatsApp {
+  id            String   @id @default("default")
+  base_url      String   @default("https://wa.fastlegal.in")
+  api_key       String   @default("")
+  account_name  String   @default("fastlegal")
+  template_name String   @default("donation_receipt")
+  updated_at    DateTime @updatedAt
+}
+
+model Donor {
+  id         String   @id @default(cuid())
+  trust_id   String
+  trust      Trust    @relation(fields: [trust_id], references: [id])
+  name       String
+  mobile     String
+  city       String?
+  email      String?
+  address    String?
+  state      String?
+  pincode    String?
+  donor_type String?  @default("INDIVIDUAL")
+  pan_number String?
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@unique([trust_id, mobile])
+  @@index([trust_id, name])
+}
+
+model PrasadToken {
+  id                String    @id @default(cuid())
+  trust_id          String
+  trust             Trust     @relation(fields: [trust_id], references: [id])
+  code              String    @unique
+  donor_name        String
+  donor_mobile      String
+  amount            Decimal   @db.Decimal(10, 2)
+  packets           Int
+  rupees_per_packet Int       @default(100)
+  status            String    @default("ISSUED")
+  issued_by         String?
+  redeemed_at       DateTime?
+  whatsapp_sent     Boolean   @default(false)
+  created_at        DateTime  @default(now())
+
+  @@index([trust_id, created_at])
 }
 
 model Donation {

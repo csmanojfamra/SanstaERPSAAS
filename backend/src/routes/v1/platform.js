@@ -8,6 +8,11 @@ const {
   validate,
 } = require('../../utils/validators')
 const { createAuditLog } = require('../../services/audit.service')
+const { z } = require('zod')
+const {
+  getPlatformWhatsAppRow,
+  publicWhatsAppSettings,
+} = require('../../services/whatsappConfig.service')
 
 function trustSummary(trust) {
   return {
@@ -22,6 +27,9 @@ function trustSummary(trust) {
     receipt_prefix: trust.receipt_prefix,
     current_fy: trust.current_fy,
     is_active: trust.is_active,
+    whatsapp_enabled: trust.whatsapp_enabled !== false,
+    whatsapp_account: trust.whatsapp_account || '',
+    whatsapp_template: trust.whatsapp_template || '',
     primary_color: trust.primary_color,
     secondary_color: trust.secondary_color,
     created_at: trust.created_at,
@@ -264,6 +272,121 @@ router.patch('/users/:userId', async (req, res, next) => {
     })
 
     res.json({ success: true, user: userSummary(user) })
+  } catch (err) {
+    next(err)
+  }
+})
+
+const whatsappSettingsSchema = z.object({
+  base_url: z.string().url().max(200),
+  account_name: z.string().min(1).max(80),
+  template_name: z.string().min(1).max(80).regex(/^[a-z0-9_]+$/, 'Template name uses lowercase letters, numbers, and underscores'),
+  api_key: z.string().max(200).optional().or(z.literal('')),
+})
+
+const trustWhatsAppSchema = z.object({
+  whatsapp_enabled: z.boolean(),
+  whatsapp_account: z.string().max(80).optional().or(z.literal('')),
+  whatsapp_template: z
+    .string()
+    .max(80)
+    .regex(/^[a-z0-9_]*$/, 'Template name uses lowercase letters, numbers, and underscores')
+    .optional()
+    .or(z.literal('')),
+})
+
+// GET /api/v1/platform/whatsapp
+router.get('/whatsapp', async (req, res, next) => {
+  try {
+    const row = await getPlatformWhatsAppRow()
+    res.json({ success: true, whatsapp: publicWhatsAppSettings(row) })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// PUT /api/v1/platform/whatsapp
+router.put('/whatsapp', async (req, res, next) => {
+  try {
+    const data = validate(whatsappSettingsSchema, req.body)
+    const current = await getPlatformWhatsAppRow()
+    const incomingKey = (data.api_key || '').trim()
+    const api_key = incomingKey || current?.api_key || ''
+
+    const saved = await prisma.platformWhatsApp.upsert({
+      where: { id: 'default' },
+      create: {
+        id: 'default',
+        base_url: data.base_url.replace(/\/$/, ''),
+        api_key,
+        account_name: data.account_name.trim(),
+        template_name: data.template_name.trim(),
+      },
+      update: {
+        base_url: data.base_url.replace(/\/$/, ''),
+        api_key,
+        account_name: data.account_name.trim(),
+        template_name: data.template_name.trim(),
+      },
+    })
+
+    await createAuditLog({
+      trust_id: req.platformAdmin.trust_id,
+      user_id: req.platformAdmin.id,
+      module: 'PLATFORM',
+      action: 'UPDATE',
+      entity_type: 'PlatformWhatsApp',
+      entity_id: saved.id,
+      description: 'Platform updated WhatsApp connection',
+      ip_address: req.ip || null,
+      user_agent: req.headers['user-agent'] || null,
+      metadata: { account_name: saved.account_name, key_updated: Boolean(incomingKey) },
+    })
+
+    res.json({ success: true, whatsapp: publicWhatsAppSettings(saved) })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// PUT /api/v1/platform/trusts/:trustId/whatsapp
+router.put('/trusts/:trustId/whatsapp', async (req, res, next) => {
+  try {
+    const data = validate(trustWhatsAppSchema, req.body)
+    const existing = await prisma.trust.findUnique({ where: { id: req.params.trustId } })
+    if (!existing) {
+      return res.status(404).json({ success: false, message: 'Trust not found', code: 'NOT_FOUND' })
+    }
+
+    const trust = await prisma.trust.update({
+      where: { id: existing.id },
+      data: {
+        whatsapp_enabled: data.whatsapp_enabled,
+        whatsapp_account: (data.whatsapp_account || '').trim() || null,
+        whatsapp_template: (data.whatsapp_template || '').trim() || null,
+      },
+    })
+
+    await createAuditLog({
+      trust_id: trust.id,
+      user_id: req.platformAdmin.id,
+      module: 'PLATFORM',
+      action: 'UPDATE',
+      entity_type: 'Trust',
+      entity_id: trust.id,
+      description: `Platform updated WhatsApp number for ${trust.name}`,
+      ip_address: req.ip || null,
+      user_agent: req.headers['user-agent'] || null,
+      metadata: {
+        whatsapp_enabled: trust.whatsapp_enabled,
+        whatsapp_account: trust.whatsapp_account,
+      },
+    })
+
+    res.json({
+      success: true,
+      trust: trustSummary(trust),
+    })
   } catch (err) {
     next(err)
   }

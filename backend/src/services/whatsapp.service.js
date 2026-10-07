@@ -11,19 +11,6 @@ const paymentModeMap = {
   ONLINE: 'Online',
 }
 
-function isConfigured() {
-  const key = process.env.WHATOMATE_API_KEY || ''
-  return Boolean(key && key !== 'whm_your_api_key')
-}
-
-function baseUrl() {
-  return (process.env.WHATOMATE_BASE_URL || 'https://wa.fastlegal.in').replace(/\/$/, '')
-}
-
-function accountName() {
-  return process.env.WHATOMATE_ACCOUNT_NAME || 'fastlegal'
-}
-
 function formatDate(date) {
   return new Date(date).toLocaleDateString('en-GB')
 }
@@ -69,8 +56,8 @@ function errorMessage(data, fallback) {
   )
 }
 
-async function whatomate(method, urlPath, { json, form } = {}) {
-  const headers = { 'X-API-Key': process.env.WHATOMATE_API_KEY }
+async function whatomate(config, method, urlPath, { json, form } = {}) {
+  const headers = { 'X-API-Key': config.apiKey }
   const init = {
     method,
     headers,
@@ -83,7 +70,7 @@ async function whatomate(method, urlPath, { json, form } = {}) {
     init.body = form
   }
 
-  const res = await fetch(`${baseUrl()}${urlPath}`, init)
+  const res = await fetch(`${config.baseUrl}${urlPath}`, init)
   const text = await res.text()
   let data = null
   if (text) {
@@ -101,8 +88,9 @@ async function whatomate(method, urlPath, { json, form } = {}) {
   return data
 }
 
-async function findContact(phone) {
+async function findContact(config, phone) {
   const data = await whatomate(
+    config,
     'GET',
     `/api/contacts?search=${encodeURIComponent(phone)}&limit=50`
   )
@@ -113,31 +101,27 @@ async function findContact(phone) {
   )
 }
 
-async function findOrCreateContact(phone, name) {
-  const existing = await findContact(phone)
+async function findOrCreateContact(config, phone, name) {
+  const existing = await findContact(config, phone)
   if (existing) return existing
 
   try {
-    const created = await whatomate('POST', '/api/contacts', {
+    const created = await whatomate(config, 'POST', '/api/contacts', {
       json: {
         phone_number: phone,
         profile_name: name || phone,
-        whatsapp_account: accountName(),
+        whatsapp_account: config.accountName,
       },
     })
     return created?.data
   } catch (err) {
-    const again = await findContact(phone)
+    const again = await findContact(config, phone)
     if (again) return again
     throw err
   }
 }
 
-function receiptTemplateName() {
-  return process.env.WHATOMATE_RECEIPT_TEMPLATE || 'donation_receipt'
-}
-
-async function sendTemplate(phone, donation, trust, receiptUrl, filePath) {
+async function sendTemplate(config, phone, donation, trust, receiptUrl, filePath) {
   const filename = `${String(donation.receipt_number || 'receipt').replace(/[^\w.-]+/g, '-')}.pdf`
   const params = {
     1: String(donation.donor_name || 'Donor').slice(0, 80),
@@ -148,8 +132,8 @@ async function sendTemplate(phone, donation, trust, receiptUrl, filePath) {
   }
   const fields = {
     phone_number: phone,
-    template_name: receiptTemplateName(),
-    account_name: accountName(),
+    template_name: config.templateName,
+    account_name: config.accountName,
     template_params: params,
     header_media_filename: filename,
   }
@@ -167,9 +151,9 @@ async function sendTemplate(phone, donation, trust, receiptUrl, filePath) {
       new Blob([fs.readFileSync(filePath)], { type: 'application/pdf' }),
       filename
     )
-    data = await whatomate('POST', '/api/messages/template', { form })
+    data = await whatomate(config, 'POST', '/api/messages/template', { form })
   } else if (receiptUrl && receiptUrl.startsWith('https://')) {
-    data = await whatomate('POST', '/api/messages/template', {
+    data = await whatomate(config, 'POST', '/api/messages/template', {
       json: { ...fields, header_media_url: receiptUrl },
     })
   } else {
@@ -188,19 +172,19 @@ async function sendTemplate(phone, donation, trust, receiptUrl, filePath) {
   }
 }
 
-async function sendDocument(contactId, donation, caption, filePath) {
+async function sendDocument(config, contactId, donation, caption, filePath) {
   const filename = `${String(donation.receipt_number || 'receipt').replace(/\//g, '-')}.pdf`
   const form = new FormData()
   form.append('contact_id', contactId)
   form.append('type', 'document')
   form.append('caption', caption.slice(0, 1024))
-  form.append('whatsapp_account', accountName())
+  form.append('whatsapp_account', config.accountName)
   form.append(
     'file',
     new Blob([fs.readFileSync(filePath)], { type: 'application/pdf' }),
     filename
   )
-  const data = await whatomate('POST', '/api/messages/media', { form })
+  const data = await whatomate(config, 'POST', '/api/messages/media', { form })
   const message = data?.data || {}
   if (message.status === 'failed') {
     throw new Error(message.error_message || 'WhatsApp document was not accepted')
@@ -213,11 +197,11 @@ async function sendDocument(contactId, donation, caption, filePath) {
   }
 }
 
-async function sendText(contactId, body) {
-  const data = await whatomate('POST', `/api/contacts/${contactId}/messages`, {
+async function sendText(config, contactId, body) {
+  const data = await whatomate(config, 'POST', `/api/contacts/${contactId}/messages`, {
     json: {
       type: 'text',
-      whatsapp_account: accountName(),
+      whatsapp_account: config.accountName,
       content: { body: body.slice(0, 4096) },
     },
   })
@@ -236,8 +220,11 @@ async function sendText(contactId, body) {
 const PENDING_TEMPLATE_REASON =
   'Donation receipt template is pending Meta approval. WhatsApp will send after it is approved.'
 
-async function sendReceiptWhatsApp(donation, trust, { receiptUrl, filePath } = {}) {
-  if (!isConfigured()) {
+async function sendReceiptWhatsApp(donation, trust, { receiptUrl, filePath, config } = {}) {
+  if (config && config.enabled === false) {
+    return { sent: false, reason: 'whatsapp_disabled' }
+  }
+  if (!config?.apiKey) {
     return { sent: false, reason: 'not_configured' }
   }
 
@@ -248,20 +235,20 @@ async function sendReceiptWhatsApp(donation, trust, { receiptUrl, filePath } = {
 
   let templateError = null
   try {
-    return await sendTemplate(phone, donation, trust, receiptUrl, filePath)
+    return await sendTemplate(config, phone, donation, trust, receiptUrl, filePath)
   } catch (err) {
     templateError = err
     console.error('WhatsApp template send failed:', err.message)
   }
 
   try {
-    const contact = await findOrCreateContact(phone, donation.donor_name)
+    const contact = await findOrCreateContact(config, phone, donation.donor_name)
     if (contact?.id && contact.service_window_open === true) {
       const caption = receiptMessage(donation, trust, receiptUrl)
       if (filePath && fs.existsSync(filePath)) {
-        return await sendDocument(contact.id, donation, caption, filePath)
+        return await sendDocument(config, contact.id, donation, caption, filePath)
       }
-      return await sendText(contact.id, caption)
+      return await sendText(config, contact.id, caption)
     }
   } catch (err) {
     console.error('WhatsApp session send failed:', err.message)
@@ -275,4 +262,26 @@ async function sendReceiptWhatsApp(donation, trust, { receiptUrl, filePath } = {
   return { sent: false, reason: message || 'Failed to send WhatsApp message' }
 }
 
-module.exports = { sendReceiptWhatsApp }
+async function sendNoticeWhatsApp({ mobile, name, body, config }) {
+  if (config && config.enabled === false) {
+    return { sent: false, reason: 'whatsapp_disabled' }
+  }
+  if (!config?.apiKey) {
+    return { sent: false, reason: 'not_configured' }
+  }
+  const phone = toWhatsAppPhone(mobile)
+  if (!phone) {
+    return { sent: false, reason: 'invalid_mobile' }
+  }
+  try {
+    const contact = await findOrCreateContact(config, phone, name)
+    if (!contact?.id) {
+      return { sent: false, reason: 'Could not open a WhatsApp chat for this number' }
+    }
+    return await sendText(config, contact.id, body)
+  } catch (err) {
+    return { sent: false, reason: err.message || 'Failed to send WhatsApp message' }
+  }
+}
+
+module.exports = { sendReceiptWhatsApp, sendNoticeWhatsApp }

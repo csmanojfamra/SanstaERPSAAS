@@ -21,6 +21,7 @@ import Accounting from '@/pages/Accounting'
 import InKindStock from '@/pages/InKindStock'
 import NewInKindReceipt from '@/pages/NewInKindReceipt'
 import Memberships from '@/pages/Memberships'
+import PrasadTokens from '@/pages/PrasadTokens'
 import PlatformRoute from '@/routes/PlatformRoute'
 import PlatformLayout from '@/layouts/PlatformLayout'
 import PlatformTrusts from '@/pages/platform/Trusts'
@@ -61,6 +62,7 @@ export default function App() {
                 <Route path="dashboard" element={<Dashboard />} />
                 <Route path="donations" element={<Donations />} />
                 <Route path="donations/new" element={<NewDonation />} />
+                <Route path="prasad" element={<PrasadTokens />} />
                 <Route path="inkind" element={<InKindStock />} />
                 <Route path="inkind/receipts/new" element={<NewInKindReceipt />} />
                 <Route path="memberships" element={<Memberships />} />

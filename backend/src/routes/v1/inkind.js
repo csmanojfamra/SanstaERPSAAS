@@ -6,6 +6,7 @@ const { createAuditLog } = require('../../services/audit.service')
 const { getAuditContext } = require('../../utils/auditContext')
 const { generateInKindReceiptNumber } = require('../../services/inkindReceiptNumber.service')
 const { getStockBalance, getBalancesForTrust } = require('../../services/stock.service')
+const { upsertDonor } = require('../../services/donor.service')
 
 const stockItemSchema = z.object({
   name: z.string().min(1).max(120),
@@ -278,6 +279,16 @@ router.post('/receipts', async (req, res, next) => {
       }
       return created
     })
+
+    try {
+      await upsertDonor(req.trustId, {
+        name: receipt.donor_name,
+        mobile: receipt.donor_mobile,
+        city: receipt.donor_city,
+      })
+    } catch (donorErr) {
+      console.error('In-kind donor save failed:', donorErr.message)
+    }
 
     await createAuditLog({
       ...getAuditContext(req),

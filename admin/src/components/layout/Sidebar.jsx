@@ -14,6 +14,7 @@ import {
   Package,
   BadgeCheck,
   Landmark,
+  Ticket,
 } from 'lucide-react'
 import { useAuthStore } from '@/store/useAuthStore'
 import { Button } from '@/components/ui/button'
@@ -25,6 +26,7 @@ const navSections = [
     items: [
       { to: '/dashboard', label: 'Dashboard Insights', mobileLabel: 'Dashboard', subtitle: 'Overview & analytics', icon: LayoutDashboard },
       { to: '/donations', label: 'Donation Register', mobileLabel: 'Donations', subtitle: 'Receipts & donor records', icon: Heart },
+      { to: '/prasad', label: 'Prasad Tokens', mobileLabel: 'Prasad', subtitle: 'One-time counter slips', icon: Ticket },
       { to: '/inkind', label: 'In-Kind Stock', mobileLabel: 'In-Kind', subtitle: 'Goods receipts & utilisation', icon: Package },
       { to: '/memberships', label: 'Lifetime Membership', mobileLabel: 'Membership', subtitle: 'Commitments & dues', icon: BadgeCheck },
       { to: '/trustees', label: 'Trustees', subtitle: 'Contributions & roles', icon: Users },
