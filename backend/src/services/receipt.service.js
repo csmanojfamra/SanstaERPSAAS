@@ -69,6 +69,46 @@ function textHindi(doc, text, x, y, opts = {}) {
   doc.text(text, x, y, { width: opts.width, align: opts.align })
 }
 
+/** Devanagari font has no A–Z. One mixed text() call draws the whole line as boxes. */
+function scriptRuns(text) {
+  const runs = []
+  let current = null
+  for (const ch of String(text || '')) {
+    const hindi = hasDevanagari(ch)
+    if (!current || current.hindi !== hindi) {
+      current = { hindi, text: ch }
+      runs.push(current)
+    } else {
+      current.text += ch
+    }
+  }
+  return runs
+}
+
+function drawCenteredRuns(doc, text, x, y, opts = {}) {
+  const size = opts.size || 8
+  const runs = scriptRuns(text).filter((run) => run.text.length)
+  if (!runs.length) return false
+
+  const measured = runs.map((run) => {
+    if (run.hindi) useHindi(doc, false)
+    else useLatin(doc, opts.bold)
+    doc.fontSize(size)
+    return { ...run, w: doc.widthOfString(run.text) }
+  })
+  const total = measured.reduce((sum, run) => sum + run.w, 0)
+  let cursor = x + Math.max(0, ((opts.width || 0) - total) / 2)
+
+  for (const run of measured) {
+    if (run.hindi) useHindi(doc, false)
+    else useLatin(doc, opts.bold)
+    doc.fillColor(opts.color || COLORS.black).fontSize(size)
+    doc.text(run.text, cursor, y, { lineBreak: false })
+    cursor += run.w
+  }
+  return true
+}
+
 function formatDate(date) {
   return new Date(date).toLocaleDateString('en-IN', {
     day: '2-digit',
@@ -173,14 +213,17 @@ async function generateReceiptBuffer(donation, trust) {
       textHindi(doc, 'ॐ', innerX, y, { align: 'center', width: innerW, size: 22, color: primary, bold: true })
       y += 28
 
-      textHindi(doc, trust.name_hindi, innerX, y, {
-        align: 'center',
-        width: innerW,
-        size: 13,
-        color: secondary,
-        bold: true,
-      })
-      y += 20
+      // Hindi name may include an English word. Keep each script on its own font
+      // or the Devanagari face prints the whole title as empty boxes.
+      const nameHi = String(trust.name_hindi || '').trim()
+      if (nameHi && hasDevanagari(nameHi)) {
+        drawCenteredRuns(doc, nameHi, innerX, y, {
+          width: innerW,
+          size: 13,
+          color: secondary,
+        })
+        y += 20
+      }
 
       if (trust.name) {
         textLatin(doc, trust.name, innerX, y, { align: 'center', width: innerW, size: 9, bold: true })
@@ -340,7 +383,6 @@ async function generateReceiptBuffer(donation, trust) {
       doc.rect(innerX, y, innerW, 44).fill(secondary)
       // Use regular (not bold) Devanagari — bold face can miss glyphs → □□□□ on some hosts.
       // Never mix Latin into this string; fall back if name is empty/mixed/corrupt.
-      const nameHi = String(trust.name_hindi || '').trim()
       const blessing =
         nameHi && hasDevanagari(nameHi) && !/[A-Za-z]/.test(nameHi)
           ? `॥ ${nameHi} ॥`
