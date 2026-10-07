@@ -19,6 +19,7 @@ const { createNotification } = require('../../services/notification.service')
 const { getAuditContext } = require('../../utils/auditContext')
 const { postDonationJournal, reverseDonationJournal } = require('../../services/accounting.service')
 const { upsertDonor } = require('../../services/donor.service')
+const { publicUrl } = require('../../utils/publicUrl')
 
 function donationAmount(d) {
   return Number(d.amount) || 0
@@ -596,7 +597,7 @@ router.get('/:id/receipt', async (req, res, next) => {
       })
     }
 
-    const receipt_url = `${process.env.PUBLIC_URL || ''}${receiptPath}`
+    const receipt_url = publicUrl(req, receiptPath)
 
     // ?format=json — return URL only (e.g. integrations)
     if (req.query.format === 'json') {
@@ -721,7 +722,7 @@ router.post('/:id/regenerate-receipt', async (req, res, next) => {
       })
     }
 
-    const receipt_url = `${process.env.PUBLIC_URL || ''}${receiptPath}`
+    const receipt_url = publicUrl(req, receiptPath)
 
     await createAuditLog({
       ...getAuditContext(req),

@@ -6,11 +6,12 @@ const { resolveWhatsAppConfig } = require('./whatsappConfig.service')
 const { getReceiptFilePath } = require('./storage.service')
 const { createNotification } = require('./notification.service')
 const { createAuditLog } = require('./audit.service')
+const { publicUrl } = require('../utils/publicUrl')
 
 async function dispatchReceiptWhatsApp(donation, trust, { audit } = {}) {
   const { filepath, publicPath } = getReceiptFilePath(donation.receipt_number)
   const receiptPath = donation.receipt_pdf_path || publicPath
-  const fullUrl = `${process.env.PUBLIC_URL || ''}${receiptPath.startsWith('/') ? receiptPath : `/${receiptPath}`}`
+  const fullUrl = publicUrl(null, receiptPath)
 
   const config = await resolveWhatsAppConfig(trust)
   const result = await sendReceiptWhatsApp(donation, trust, {

@@ -4,6 +4,7 @@ const prisma = require('../lib/prisma')
 const { resolveWhatsAppConfig } = require('./whatsappConfig.service')
 const { sendNoticeWhatsApp } = require('./whatsapp.service')
 const { upsertDonor } = require('./donor.service')
+const { publicOrigin } = require('../utils/publicUrl')
 
 function packetCount(amount, rupeesPerPacket) {
   const rate = Math.max(1, Math.floor(Number(rupeesPerPacket) || 100))
@@ -12,11 +13,7 @@ function packetCount(amount, rupeesPerPacket) {
 }
 
 function publicBase(req) {
-  const configured = (process.env.PUBLIC_URL || process.env.APP_URL || '').replace(/\/$/, '')
-  if (configured) return configured
-  const proto = req.get('x-forwarded-proto') || req.protocol || 'https'
-  const host = req.get('x-forwarded-host') || req.get('host')
-  return `${proto}://${host}`
+  return publicOrigin(req)
 }
 
 function presentToken(token, extras = {}) {

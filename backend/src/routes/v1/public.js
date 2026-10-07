@@ -2,6 +2,7 @@ const router = require('express').Router()
 const prisma = require('../../lib/prisma')
 const { resolveTrustFromRequest, tenantPublicConfig } = require('../../services/tenant.service')
 const { buildTrustLoginUrl } = require('../../utils/tenantHost')
+const { publicUrl } = require('../../utils/publicUrl')
 
 const cache = {}
 const CACHE_TTL = 5 * 60 * 1000
@@ -23,9 +24,7 @@ function setCache(key, data) {
 function resolvePublicAssetUrl(url) {
   if (!url) return null
   if (url.startsWith('http://') || url.startsWith('https://')) return url
-  const base = (process.env.APP_URL || process.env.PUBLIC_URL || '').replace(/\/$/, '')
-  if (!base) return url
-  return `${base}${url.startsWith('/') ? url : `/${url}`}`
+  return publicUrl(null, url)
 }
 
 function publicTrusteeRoleFields(role) {
