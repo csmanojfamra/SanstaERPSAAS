@@ -19,11 +19,11 @@ function packetPreview(amount, rate) {
 
 function whatsappNote(whatsapp) {
   if (!whatsapp) return ''
-  if (whatsapp.sent) return 'WhatsApp par token link chala gaya.'
+  if (whatsapp.sent) return 'The token link was sent on WhatsApp.'
   if (whatsapp.reason === 'not_configured' || whatsapp.reason === 'whatsapp_disabled') {
-    return 'WhatsApp abhi connected nahi hai. Print slip kaam karegi.'
+    return 'WhatsApp is not connected. The printed slip still works.'
   }
-  return `WhatsApp nahi gaya: ${whatsapp.reason || 'unknown'}. Print slip kaam karegi.`
+  return `WhatsApp was not sent: ${whatsapp.reason || 'unknown'}. The printed slip still works.`
 }
 
 export default function PrasadTokens() {
@@ -55,12 +55,12 @@ export default function PrasadTokens() {
       setForm((prev) => ({ ...prev, donor_name: '', donor_mobile: '', amount: '' }))
       qc.invalidateQueries({ queryKey: ['prasad-tokens'] })
       toast({
-        title: `${data.token.packets} packet ka token ban gaya`,
+        title: `Token created for ${data.token.packets} packet${data.token.packets === 1 ? '' : 's'}`,
         description: whatsappNote(data.whatsapp),
       })
     },
     onError: (err) => {
-      toast({ title: 'Token nahi bana', description: getApiErrorMessage(err), variant: 'destructive' })
+      toast({ title: 'Could not create token', description: getApiErrorMessage(err), variant: 'destructive' })
     },
   })
 
@@ -82,7 +82,7 @@ export default function PrasadTokens() {
       <PageHeader
         title="Prasad tokens"
         mobileTitle="Prasad"
-        description="Counter pe naam aur amount likho. Print aur WhatsApp dono par ek baar chalega QR."
+        description="Enter the name and amount at the counter. Print the slip and send the same one-time QR on WhatsApp."
       />
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)] print:block">
@@ -146,10 +146,12 @@ export default function PrasadTokens() {
                 </div>
               </div>
               <p className="text-sm text-muted-foreground">
-                {packets > 0 ? `${packets} packet dena hai.` : 'Amount likhte hi packet count dikhega.'}
+                {packets > 0
+                  ? `${packets} packet${packets === 1 ? '' : 's'} to give.`
+                  : 'Enter an amount to see the packet count.'}
               </p>
               <Button type="submit" disabled={issue.isPending}>
-                {issue.isPending ? 'Ban raha hai...' : 'Token banao'}
+                {issue.isPending ? 'Creating...' : 'Create token'}
               </Button>
             </form>
           </CardContent>
@@ -159,9 +161,9 @@ export default function PrasadTokens() {
           <Card className="mx-auto w-full max-w-sm">
             <CardContent className="pt-6 text-center">
               <p className="text-sm font-semibold text-maroon">{trustName}</p>
-              <p className="mt-1 text-xs text-muted-foreground">Prasad token — ek baar</p>
+              <p className="mt-1 text-xs text-muted-foreground">Prasad token — one time only</p>
               <p className="mt-3 text-5xl font-bold text-maroon">{slip.packets}</p>
-              <p className="text-sm text-muted-foreground">packet</p>
+              <p className="text-sm text-muted-foreground">{slip.packets === 1 ? 'packet' : 'packets'}</p>
               <p className="mt-3 text-base font-medium">{slip.donor_name}</p>
               <p className="text-sm">{slip.donor_mobile}</p>
               <p className="text-sm">{formatCurrency(slip.amount)}</p>
@@ -178,7 +180,7 @@ export default function PrasadTokens() {
         ) : (
           <Card className="print:hidden">
             <CardContent className="pt-6 text-sm text-muted-foreground">
-              Token banne ke baad yahan QR slip aayegi. Phone camera se scan karte hi counter ko naam, amount aur packet count dikhega. “Prasad de diya” ek hi baar chalega.
+              The QR slip appears here after you create a token. A phone camera opens the name, amount, and packet count. Mark given works only once.
             </CardContent>
           </Card>
         )}
@@ -187,7 +189,7 @@ export default function PrasadTokens() {
       <Card className="mt-4 print:hidden">
         <CardContent className="pt-6">
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-semibold">Aaj ke tokens</h2>
+            <h2 className="text-sm font-semibold">Recent tokens</h2>
             <Button type="button" variant="outline" size="sm" onClick={() => tokensQuery.refetch()}>
               Refresh
             </Button>
@@ -216,7 +218,7 @@ export default function PrasadTokens() {
                 {!tokensQuery.isLoading && (tokensQuery.data || []).length === 0 ? (
                   <tr>
                     <td colSpan={5} className="py-4 text-muted-foreground">
-                      Abhi koi token nahi hai.
+                      No tokens yet.
                     </td>
                   </tr>
                 ) : null}

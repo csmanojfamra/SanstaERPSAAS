@@ -16,16 +16,18 @@ function renderPrasadPage(token) {
   const trustName = token.trust?.name_hindi || token.trust?.name || 'Mandir'
   const amount = Number(token.amount).toLocaleString('en-IN')
   const statusBlock = used
-    ? `<div class="banner used">Yeh token pehle use ho chuka hai.<br>Prasad dubara mat dena.${
+    ? `<div class="banner used">This token has already been used.<br>Do not give prasad again.${
         token.redeemed_at ? `<div class="when">${esc(when(token.redeemed_at))}</div>` : ''
       }</div>`
     : `<form method="post" action="/p/${esc(token.code)}/redeem">
-        <button type="submit">Prasad de diya</button>
+        <button type="submit">Mark prasad as given</button>
       </form>
-      <p class="hint">Ek baar dabane ke baad yeh token band ho jayega.</p>`
+      <p class="hint">This works only once. After that the token is closed.</p>`
+
+  const packetLabel = Number(token.packets) === 1 ? 'packet' : 'packets'
 
   return `<!doctype html>
-<html lang="hi">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -53,7 +55,7 @@ function renderPrasadPage(token) {
     <p class="sub">Prasad counter</p>
     <div class="card">
       <p class="packets">${esc(token.packets)}</p>
-      <p class="label">packet</p>
+      <p class="label">${esc(packetLabel)}</p>
       <div class="row"><span>Name</span><b>${esc(token.donor_name)}</b></div>
       <div class="row"><span>Mobile</span><b>${esc(token.donor_mobile)}</b></div>
       <div class="row"><span>Amount</span><b>₹${esc(amount)}</b></div>
@@ -66,15 +68,15 @@ function renderPrasadPage(token) {
 
 function renderMissing() {
   return `<!doctype html>
-<html lang="hi">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Token not found</title>
 </head>
 <body style="font-family:system-ui,sans-serif;padding:32px;text-align:center">
-  <h1>Token nahi mila</h1>
-  <p>Yeh QR galat hai ya token delete ho chuka hai. Prasad mat dena.</p>
+  <h1>Token not found</h1>
+  <p>This QR is invalid. Do not give prasad.</p>
 </body>
 </html>`
 }
