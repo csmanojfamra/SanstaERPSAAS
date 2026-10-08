@@ -137,6 +137,111 @@ function istBound(day, end) {
   return new Date(`${day}T${end ? '23:59:59.999' : '00:00:00'}+05:30`)
 }
 
+function todayIst() {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+}
+
+function accountWhere(trustId, fromDay, toDay) {
+  return {
+    trust_id: trustId,
+    created_at: {
+      gte: istBound(fromDay, false),
+      lte: istBound(toDay, true),
+    },
+  }
+}
+
+function mergeAccountRows(allRows, givenRows, keyName) {
+  const givenByKey = new Map(givenRows.map((row) => [Number(row[keyName]), row]))
+  return allRows
+    .map((row) => {
+      const key = Number(row[keyName])
+      const given = givenByKey.get(key)
+      const tokens = row._count._all
+      const packets = Number(row._sum.packets || 0)
+      const givenPackets = Number(given?._sum.packets || 0)
+      const givenTokens = given?._count._all || 0
+      return {
+        value: Number(key),
+        tokens,
+        amount: Number(row._sum.amount || 0),
+        packets,
+        given_tokens: givenTokens,
+        open_tokens: tokens - givenTokens,
+        given_packets: givenPackets,
+        open_packets: packets - givenPackets,
+      }
+    })
+    .sort((a, b) => a.value - b.value)
+}
+
+function accountTotal(rows) {
+  return rows.reduce(
+    (sum, row) => ({
+      tokens: sum.tokens + row.tokens,
+      amount: sum.amount + row.amount,
+      packets: sum.packets + row.packets,
+      given_tokens: sum.given_tokens + row.given_tokens,
+      open_tokens: sum.open_tokens + row.open_tokens,
+      given_packets: sum.given_packets + row.given_packets,
+      open_packets: sum.open_packets + row.open_packets,
+    }),
+    {
+      tokens: 0,
+      amount: 0,
+      packets: 0,
+      given_tokens: 0,
+      open_tokens: 0,
+      given_packets: 0,
+      open_packets: 0,
+    },
+  )
+}
+
+async function prasadAccount(trustId, query = {}) {
+  const from = query.from || query.to || todayIst()
+  const to = query.to || query.from || from
+  const where = accountWhere(trustId, from, to)
+  const givenWhere = { ...where, status: 'REDEEMED' }
+
+  const [byRate, givenByRate, byAmount, givenByAmount] = await Promise.all([
+    prisma.prasadToken.groupBy({
+      by: ['rupees_per_packet'],
+      where,
+      _count: { _all: true },
+      _sum: { amount: true, packets: true },
+    }),
+    prisma.prasadToken.groupBy({
+      by: ['rupees_per_packet'],
+      where: givenWhere,
+      _count: { _all: true },
+      _sum: { amount: true, packets: true },
+    }),
+    prisma.prasadToken.groupBy({
+      by: ['amount'],
+      where,
+      _count: { _all: true },
+      _sum: { amount: true, packets: true },
+    }),
+    prisma.prasadToken.groupBy({
+      by: ['amount'],
+      where: givenWhere,
+      _count: { _all: true },
+      _sum: { amount: true, packets: true },
+    }),
+  ])
+
+  const rates = mergeAccountRows(byRate, givenByRate, 'rupees_per_packet')
+  const amounts = mergeAccountRows(byAmount, givenByAmount, 'amount')
+  return {
+    from,
+    to,
+    by_rate: rates,
+    by_amount: amounts,
+    total: accountTotal(rates),
+  }
+}
+
 async function listPrasadTokens(trustId, query = {}) {
   const q = String(query.q || '').trim()
   const digits = q.replace(/\D/g, '')
@@ -208,6 +313,7 @@ module.exports = {
   issuePrasadToken,
   resendPrasadWhatsApp,
   listPrasadTokens,
+  prasadAccount,
   findTokenByCode,
   redeemPrasadToken,
 }

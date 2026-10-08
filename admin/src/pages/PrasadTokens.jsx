@@ -22,11 +22,63 @@ function formatWhen(value) {
 }
 import DonorSuggest from '@/components/donors/DonorSuggest'
 
+function todayIst() {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+}
+
 function packetPreview(amount, rate) {
   const rupees = Number(amount)
   const perPacket = Math.max(1, Math.floor(Number(rate) || 100))
   if (!rupees || rupees <= 0) return 0
   return Math.max(1, Math.floor(rupees / perPacket))
+}
+
+function AccountTable({ title, label, rows, total }) {
+  return (
+    <div>
+      <h3 className="mb-2 text-sm font-medium">{title}</h3>
+      <div className="overflow-x-auto">
+        <table className="w-full text-left text-sm">
+          <thead>
+            <tr className="border-b text-muted-foreground">
+              <th className="py-2 pr-3 font-medium">{label}</th>
+              <th className="py-2 pr-3 font-medium">Tokens</th>
+              <th className="py-2 pr-3 font-medium">Amount</th>
+              <th className="py-2 pr-3 font-medium">Packets</th>
+              <th className="py-2 pr-3 font-medium">Given</th>
+              <th className="py-2 font-medium">Still open</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="py-3 text-muted-foreground">No tokens in this period.</td>
+              </tr>
+            ) : rows.map((row) => (
+              <tr key={row.key} className="border-b">
+                <td className="py-2 pr-3">{row.label}</td>
+                <td className="py-2 pr-3">{row.tokens}</td>
+                <td className="py-2 pr-3">{formatCurrency(row.amount)}</td>
+                <td className="py-2 pr-3">{row.packets}</td>
+                <td className="py-2 pr-3">{row.given_packets}</td>
+                <td className="py-2">{row.open_packets}</td>
+              </tr>
+            ))}
+            {rows.length > 0 ? (
+              <tr className="font-semibold">
+                <td className="py-2 pr-3">Total</td>
+                <td className="py-2 pr-3">{total.tokens}</td>
+                <td className="py-2 pr-3">{formatCurrency(total.amount)}</td>
+                <td className="py-2 pr-3">{total.packets}</td>
+                <td className="py-2 pr-3">{total.given_packets}</td>
+                <td className="py-2">{total.open_packets}</td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
 }
 
 function whatsappNote(whatsapp) {
@@ -49,6 +101,10 @@ export default function PrasadTokens() {
   })
   const [slip, setSlip] = useState(null)
   const [filters, setFilters] = useState({ q: '', from: '', to: '', status: '' })
+  const [accountRange, setAccountRange] = useState(() => {
+    const day = todayIst()
+    return { from: day, to: day }
+  })
   const [page, setPage] = useState(1)
   const [sendingId, setSendingId] = useState('')
 
@@ -71,6 +127,7 @@ export default function PrasadTokens() {
       setSlip({ ...data.token, whatsapp: data.whatsapp })
       setForm((prev) => ({ ...prev, donor_name: '', donor_mobile: '', amount: '' }))
       qc.invalidateQueries({ queryKey: ['prasad-tokens'] })
+      qc.invalidateQueries({ queryKey: ['prasad-account'] })
       toast({
         title: `Token created for ${data.token.packets} packet${data.token.packets === 1 ? '' : 's'}`,
         description: whatsappNote(data.whatsapp),
@@ -83,6 +140,14 @@ export default function PrasadTokens() {
 
   const packets = packetPreview(form.amount, form.rupees_per_packet)
   const trustName = trust?.name_hindi || trust?.name || 'Mandir'
+
+  const accountQuery = useQuery({
+    queryKey: ['prasad-account', accountRange],
+    queryFn: async () => {
+      const { data } = await api.get('/prasad-tokens/account', { params: accountRange })
+      return data.account
+    },
+  })
 
   const tokens = tokensQuery.data?.tokens || []
   const summary = tokensQuery.data?.summary
@@ -191,7 +256,7 @@ export default function PrasadTokens() {
               </div>
               <p className="text-sm text-muted-foreground">
                 {packets > 0
-                  ? `${packets} packet${packets === 1 ? '' : 's'} to give.`
+                  ? `₹${Number(form.amount).toLocaleString('en-IN')} at ₹${Math.max(1, Math.floor(Number(form.rupees_per_packet) || 100))} per packet = ${packets} packet${packets === 1 ? '' : 's'}.`
                   : 'Enter an amount to see the packet count.'}
               </p>
               <Button type="submit" disabled={issue.isPending}>
@@ -229,6 +294,72 @@ export default function PrasadTokens() {
           </Card>
         )}
       </div>
+
+      <Card className="mt-4 print:hidden">
+        <CardContent className="pt-6">
+          <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold">Prasad account</h2>
+              <p className="text-xs text-muted-foreground">
+                Tokens, money collected, and packets, split by packet rate and by token amount.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const day = todayIst()
+                  setAccountRange({ from: day, to: day })
+                }}
+              >
+                Today
+              </Button>
+              <Input
+                type="date"
+                aria-label="Account from"
+                className="w-40"
+                value={accountRange.from}
+                onChange={(e) => setAccountRange((prev) => ({ ...prev, from: e.target.value }))}
+              />
+              <Input
+                type="date"
+                aria-label="Account to"
+                className="w-40"
+                value={accountRange.to}
+                onChange={(e) => setAccountRange((prev) => ({ ...prev, to: e.target.value }))}
+              />
+            </div>
+          </div>
+          {accountQuery.data ? (
+            <div className="grid gap-6">
+              <AccountTable
+                title="By packet rate"
+                label="Rate"
+                rows={(accountQuery.data.by_rate || []).map((row) => ({
+                  key: row.value,
+                  label: `${formatCurrency(row.value)} per packet`,
+                  ...row,
+                }))}
+                total={accountQuery.data.total}
+              />
+              <AccountTable
+                title="By token amount"
+                label="Token"
+                rows={(accountQuery.data.by_amount || []).map((row) => ({
+                  key: row.value,
+                  label: `${formatCurrency(row.value)} token`,
+                  ...row,
+                }))}
+                total={accountQuery.data.total}
+              />
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">{accountQuery.isLoading ? 'Loading account...' : 'No account yet.'}</p>
+          )}
+        </CardContent>
+      </Card>
 
       <Card className="mt-4 print:hidden">
         <CardContent className="pt-6">
@@ -272,6 +403,7 @@ export default function PrasadTokens() {
                   <th className="py-2 pr-3 font-medium">Name</th>
                   <th className="py-2 pr-3 font-medium">Mobile</th>
                   <th className="py-2 pr-3 font-medium">Amount</th>
+                  <th className="py-2 pr-3 font-medium">Rate</th>
                   <th className="py-2 pr-3 font-medium">Packets</th>
                   <th className="py-2 pr-3 font-medium">Status</th>
                   <th className="py-2 pr-3 font-medium">WhatsApp</th>
@@ -285,6 +417,7 @@ export default function PrasadTokens() {
                     <td className="py-2 pr-3">{token.donor_name}</td>
                     <td className="py-2 pr-3">{token.donor_mobile}</td>
                     <td className="py-2 pr-3">{formatCurrency(token.amount)}</td>
+                    <td className="py-2 pr-3">{formatCurrency(token.rupees_per_packet)} / pkt</td>
                     <td className="py-2 pr-3">{token.packets}</td>
                     <td className="py-2 pr-3">{token.status === 'REDEEMED' ? 'Used' : 'Open'}</td>
                     <td className="py-2 pr-3">{token.whatsapp_sent ? 'Sent' : 'Not sent'}</td>
@@ -303,7 +436,7 @@ export default function PrasadTokens() {
                 ))}
                 {!tokensQuery.isLoading && tokens.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="py-4 text-muted-foreground">
+                    <td colSpan={9} className="py-4 text-muted-foreground">
                       No tokens for this search.
                     </td>
                   </tr>

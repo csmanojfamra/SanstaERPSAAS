@@ -3,13 +3,22 @@ const { z } = require('zod')
 const { validate } = require('../../utils/validators')
 const { createAuditLog } = require('../../services/audit.service')
 const { getAuditContext } = require('../../utils/auditContext')
-const { issuePrasadToken, listPrasadTokens, resendPrasadWhatsApp } = require('../../services/prasadToken.service')
+const { issuePrasadToken, listPrasadTokens, prasadAccount, resendPrasadWhatsApp } = require('../../services/prasadToken.service')
 
 const issueSchema = z.object({
   donor_name: z.string().trim().min(2).max(200),
   donor_mobile: z.string().regex(/^[6-9]\d{9}$/, 'Enter a valid 10-digit mobile'),
   amount: z.coerce.number().positive().max(10000000),
   rupees_per_packet: z.coerce.number().int().min(1).max(100000).optional(),
+})
+
+router.get('/account', async (req, res, next) => {
+  try {
+    const account = await prasadAccount(req.trustId, req.query)
+    res.json({ success: true, account })
+  } catch (err) {
+    next(err)
+  }
 })
 
 router.get('/', async (req, res, next) => {
